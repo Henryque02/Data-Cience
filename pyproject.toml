@@ -21,12 +21,7 @@ dependencies = [
 mt5 = ["MetaTrader5>=5; sys_platform == 'win32'"]
 
 [dependency-groups]
-dev = ["pytest>=8,<10"]
 notebook = ["ipykernel>=6", "nbformat>=5", "nbclient>=0.10", "matplotlib>=3.9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/abertura"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
