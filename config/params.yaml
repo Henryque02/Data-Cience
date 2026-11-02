@@ -1,0 +1,56 @@
+acquisition:
+  timeframe: m1
+  timezone: UTC
+  price_type: bid
+  include_volume: true
+  cache: true
+  chunks: monthly
+  workers: 3
+  batch_size: 10
+  batch_pause_ms: 1000
+  retries: 3
+  timeout_seconds: 300
+  pilot_periods:
+    - {start: '2020-09-01', end_exclusive: '2020-09-03'}
+    - {start: '2026-10-29', end_exclusive: '2026-10-31'}
+features:
+  pre_open:
+    prefix: x_pre_
+    cutoff_brt: '08:58'
+    recent_windows_minutes: [60, 180]
+    max_price_age_minutes: 60
+    reference_max_age_minutes: 10080
+    asia_sessions:
+      nikkei: {timezone: Asia/Tokyo, start: '09:00', end: '15:30'}
+      a50: {timezone: Asia/Shanghai, start: '09:30', end: '15:00'}
+  open_observed:
+    prefix: x_open_
+    source: first_candle_open
+    used_by: [behavior, range]
+sample:
+  max_open_delay_minutes: 15
+labels:
+  post_open_minutes: 60
+  gap_threshold:
+    method: fixed
+    value: 0.003
+    fitted_on: training_only
+  behavior:
+    trend_margin: 0.001
+models:
+  logistic_c: 0.1
+walk_forward:
+  train_years: 2
+  test_months: 3
+  step_months: 3
+  min_train_rows: 60
+  shuffle: false
+backtest:
+  status: pending_future_phase
+  entry_rule: next_candle_after_first
+  slippage_ticks_per_side: 1
+  sensitivity_ticks: [0, 1, 2]
+  simultaneous_target_stop: worst_case
+  contracts:
+    win: {brl_per_point: 0.20, tick_points: 5, fees_brl_per_side: null, brokerage_brl_per_side: null}
+    wdo: {brl_per_point: 10.0, tick_points: 0.5, fees_brl_per_side: null, brokerage_brl_per_side: null}

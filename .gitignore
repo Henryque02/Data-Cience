@@ -1,4 +1,11 @@
 # Byte-compiled / optimized / DLL files
+/data/
+/gg/*.csv
+/node_modules/
+/.superpowers/
+/.worktrees/
+/.uv-cache/
+/.npm-cache/
 __pycache__/
 *.py[codz]
 *$py.class

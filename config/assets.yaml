@@ -1,0 +1,29 @@
+period:
+  start: '2020-09-01'
+  end: last_complete_utc_day
+defaults:
+  timeframe: m1
+  timezone: UTC
+  price_type: bid
+  volume_type: provider_specific
+assets:
+  win: {source: professor, symbol: 'WIN$N', role: target, filename: 'WIN$N_M1.csv', timezone: America/Sao_Paulo}
+  wdo: {source: professor, symbol: 'WDO$N', role: target, filename: 'WDO$N_M1.csv', timezone: America/Sao_Paulo}
+  spx: {source: dukascopy, symbol: usa500idxusd, role: feature, description: US 500}
+  ndx: {source: dukascopy, symbol: usatechidxusd, role: feature, description: US 100 Tech}
+  sx5e: {source: dukascopy, symbol: eusidxeur, role: feature, description: Europe 50}
+  ftse: {source: dukascopy, symbol: gbridxgbp, role: feature, description: FTSE 100}
+  nikkei: {source: dukascopy, symbol: jpnidxjpy, role: feature, description: Japan 225}
+  a50: {source: dukascopy, symbol: chiidxusd, role: feature, description: China A50}
+  brent: {source: dukascopy, symbol: brentcmdusd, role: feature, description: Brent}
+  gold: {source: dukascopy, symbol: xauusd, role: feature, description: Ouro}
+  dxy: {source: dukascopy, symbol: dollaridxusd, role: feature, description: Dollar Index}
+  usdmxn: {source: dukascopy, symbol: usdmxn, role: feature, description: USD/MXN}
+  copper: {source: dukascopy, symbol: coppercmdusd, role: feature, description: Cobre}
+  eurusd: {source: dukascopy, symbol: eurusd, role: feature, description: EUR/USD}
+  usdjpy: {source: dukascopy, symbol: usdjpy, role: feature, description: USD/JPY}
+excluded:
+  ust: Decisão do usuário; não coletar US T-Bond.
+  topix: Fonte gratuita com restrição de finalidade e compartilhamento.
+  csi300: Sem fonte gratuita M1 utilizável confirmada.
+  shanghai: Fontes gratuitas confirmadas fora do período ou com poucos dias.

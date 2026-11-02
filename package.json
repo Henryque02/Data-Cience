@@ -1,0 +1,8 @@
+{
+  "name": "abertura-b3-data",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ferramenta fixada para coleta Dukascopy",
+  "engines": { "node": ">=22" },
+  "dependencies": { "dukascopy-node": "1.51.1" }
+}
