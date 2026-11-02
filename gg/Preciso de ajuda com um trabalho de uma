@@ -1,9 +1,0 @@
-Preciso de ajuda com um trabalho de uma matéria da faculdade chamada datacience para mercado financeiro, onde basicamente vamos usar datacience/machine learning para realizar operações de daytrade com mini indice e mini dolar (foram escolhidos por causa da sua liquidez) e assim buscar maximizar os ganhos. O nosso é o Modelo 3: Classificação de abertura (anexei a foto do quadro para tentar exemplificar melhor o que devemos fazer). Nossa estratégia é norteada pela pergunta "o que acontece entre o fechar e abrir da bolsa?" e a partir dela vamos tentar correlacionar o movimento de outras bolsas e ativos (anexei a imagem de uma planilha que um colega fez e mostrou para o professor, não entendi direito esses horários, mas o professor gostou dessas opções de bolsa e pediu para adicionarmos ouro e petroleo) com a a abertura da B3, modelando assim comportamento dos primeiros minutos do pregão e com isso tentar prever se ela vai abrir "normal" ou com gap de alta de baixa, de quanto sera esses gaps para assim saber o momento de encerrar a operação, seja de compra ou venda.
-
-"Gerar probabilidades: tendência, reversão, volatilidade ou faixa operacional e Validar com walk-forward levando slippage em consideração." Faz sentido com o objetivo a cima, correto? Foram observações do professor, mas não sei se fazem sentido ou não.
-
-Meu professor disponibilizou esses 2 datasets do mini indice e mini dolar e queria saber se eles serão úteis ou devo procurar outros.
-
-Como não entendo muito do assunto queria levantar essa discussão inicial entender melhor o problema e assim montar um plano de ação depois.
-
-tenho uma pergunta inicial: Quais ativos devo buscar nas outras bolsas para correlacionar com esses 2? Sei que essas bolsas devem ter equivalentes ao mini indice, mas e o mini dolar? Elas tem também?  
