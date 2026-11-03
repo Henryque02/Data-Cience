@@ -1,24 +1,18 @@
 period:
   start: '2020-09-01'
-  end: last_complete_utc_day
-defaults:
-  timeframe: m1
-  timezone: UTC
-  price_type: bid
-  volume_type: provider_specific
 assets:
-  win: {source: professor, symbol: 'WIN$N', role: target, filename: WIN.csv, timezone: America/Sao_Paulo}
-  wdo: {source: professor, symbol: 'WDO$N', role: target, filename: WDO.csv, timezone: America/Sao_Paulo}
-  spx: {source: dukascopy, symbol: usa500idxusd, role: feature, description: US 500}
-  ndx: {source: dukascopy, symbol: usatechidxusd, role: feature, description: US 100 Tech}
-  sx5e: {source: dukascopy, symbol: eusidxeur, role: feature, description: Europe 50}
-  ftse: {source: dukascopy, symbol: gbridxgbp, role: feature, description: FTSE 100}
-  nikkei: {source: dukascopy, symbol: jpnidxjpy, role: feature, description: Japan 225}
-  a50: {source: dukascopy, symbol: chiidxusd, role: feature, description: China A50}
-  brent: {source: dukascopy, symbol: brentcmdusd, role: feature, description: Brent}
-  gold: {source: dukascopy, symbol: xauusd, role: feature, description: Ouro}
-  dxy: {source: dukascopy, symbol: dollaridxusd, role: feature, description: Dollar Index}
-  usdmxn: {source: dukascopy, symbol: usdmxn, role: feature, description: USD/MXN}
-  copper: {source: dukascopy, symbol: coppercmdusd, role: feature, description: Cobre}
-  eurusd: {source: dukascopy, symbol: eurusd, role: feature, description: EUR/USD}
-  usdjpy: {source: dukascopy, symbol: usdjpy, role: feature, description: USD/JPY}
+  win: {source: professor, description: Mini índice, filename: WIN.csv, timezone: America/Sao_Paulo}
+  wdo: {source: professor, description: Mini dólar, filename: WDO.csv, timezone: America/Sao_Paulo}
+  spx: {source: dukascopy, dukascopy_id: usa500idxusd, description: US 500}
+  ndx: {source: dukascopy, dukascopy_id: usatechidxusd, description: US 100 Tech}
+  sx5e: {source: dukascopy, dukascopy_id: eusidxeur, description: Europe 50}
+  ftse: {source: dukascopy, dukascopy_id: gbridxgbp, description: FTSE 100}
+  nikkei: {source: dukascopy, dukascopy_id: jpnidxjpy, description: Japan 225}
+  a50: {source: dukascopy, dukascopy_id: chiidxusd, description: China A50}
+  brent: {source: dukascopy, dukascopy_id: brentcmdusd, description: Brent}
+  gold: {source: dukascopy, dukascopy_id: xauusd, description: Ouro}
+  dxy: {source: dukascopy, dukascopy_id: dollaridxusd, description: Dollar Index}
+  usdmxn: {source: dukascopy, dukascopy_id: usdmxn, description: USD/MXN}
+  copper: {source: dukascopy, dukascopy_id: coppercmdusd, description: Cobre}
+  eurusd: {source: dukascopy, dukascopy_id: eurusd, description: EUR/USD}
+  usdjpy: {source: dukascopy, dukascopy_id: usdjpy, description: USD/JPY}

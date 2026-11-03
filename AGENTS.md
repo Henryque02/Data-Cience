@@ -28,7 +28,7 @@ Validação: **walk-forward** com **custos e slippage** (seção 7).
 
 ### 2.2 Lista de ativos (fica em `config/assets.yaml`)
 
-| id | Fonte | Símbolo | Papel |
+| id | Fonte | Código na fonte | Papel |
 |---|---|---|---|
 | win | MT5 | série contínua do WIN | Alvo |
 | wdo | MT5 | série contínua do WDO | Alvo |

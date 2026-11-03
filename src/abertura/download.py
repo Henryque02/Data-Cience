@@ -141,7 +141,7 @@ def inspect_csv(path: Path, start: date, end: date) -> dict:
 def download_chunk(
     root: Path,
     asset_id: str,
-    symbol: str,
+    dukascopy_id: str,
     start: date,
     end: date,
     *,
@@ -167,7 +167,7 @@ def download_chunk(
     with tempfile.TemporaryDirectory(prefix=f'{asset_id}-', dir=staging) as folder:
         command = [
             'node', str(PROJECT / 'node_modules/dukascopy-node/dist/cli/index.js'),
-            '-i', symbol, '-from', start.isoformat(), '-to', end.isoformat(),
+            '-i', dukascopy_id, '-from', start.isoformat(), '-to', end.isoformat(),
             '-t', 'm1', '-f', 'csv', '-p', 'bid', '-utc', '0', '-v', '-ch',
             '-chpath', str(CACHE / 'dukascopy'),
             '--waf-token-cache-path', str(CACHE / 'dukascopy-waf' / 'token.json'),
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
                 break
             try:
                 record = download_chunk(
-                    root, asset_id, asset['symbol'], begin, stop, pilot=args.pilot,
+                    root, asset_id, asset['dukascopy_id'], begin, stop, pilot=args.pilot,
                     timeout=settings['timeout_seconds'], batch_size=settings['batch_size'],
                     batch_pause_ms=settings['batch_pause_ms'], retries=settings['retries'],
                 )

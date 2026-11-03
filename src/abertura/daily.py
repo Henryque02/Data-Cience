@@ -57,12 +57,12 @@ def build_daily(project_root: str | Path = PROJECT) -> pd.DataFrame:
     config = yaml.safe_load((root / 'config/assets.yaml').read_text())
     interim = root / 'data/interim'
     externals = {asset_id: pd.read_parquet(interim / f'{asset_id}_m1.parquet', columns=['datetime', 'close'])
-                 for asset_id, asset in config['assets'].items() if asset['role'] == 'feature'}
+                 for asset_id, asset in config['assets'].items() if asset['source'] == 'dukascopy'}
     last = max(frame.datetime.iloc[-1] for frame in externals.values())
     calendar = b3_sessions(config['period']['start'], last.tz_convert(LOCAL_TIMEZONE).tz_localize(None).normalize())
     tables = []
     for asset_id, asset in config['assets'].items():
-        if asset['role'] == 'target':
+        if asset['source'] != 'dukascopy':
             candles = pd.read_parquet(interim / f'{asset_id}_m1.parquet')
             tables.append(build_target(asset_id, candles, externals, calendar, params))
     result = pd.concat(tables).rename_axis('date_brt').reset_index()
