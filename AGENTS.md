@@ -22,9 +22,9 @@ Validação: **walk-forward** com **custos e slippage** (seção 7).
 
 | Fonte | O quê | Como |
 |---|---|---|
-| MetaTrader 5 (conta demo de corretora brasileira) | WIN e WDO, candles de 1 min | `scripts/download_mt5.py` com a lib `MetaTrader5` (**só roda no Windows**, com o terminal MT5 aberto e logado) |
-| Dukascopy (gratuita) | Ativos externos, candles de 1 min | `scripts/download_dukascopy.sh` com `npx dukascopy-node` (precisa do Node.js) |
-| Arquivos do professor | `WIN$N_M1.csv`, `WDO$N_M1.csv` (MT5, separados por TAB, colunas `<DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> <TICKVOL> <VOL> <SPREAD>`) | Originais em `gg/`, cópias idênticas em `data/raw/professor/`. Fonte inicial no Linux; comparar com MT5 quando o grupo fornecer o download |
+| MetaTrader 5 (conta demo de corretora brasileira) | WIN e WDO, candles de 1 min | Lib `MetaTrader5`, ainda sem código no projeto (**só roda no Windows**, com o terminal MT5 aberto e logado) |
+| Dukascopy (gratuita) | Ativos externos, candles de 1 min | `python -m abertura.download`, que usa a ferramenta `dukascopy-node` (precisa do Node.js) |
+| Arquivos do professor | `WIN.csv`, `WDO.csv` (MT5, separados por TAB, colunas `<DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> <TICKVOL> <VOL> <SPREAD>`) | Em `data/raw/target/`. Fonte inicial no Linux; comparar com MT5 quando o grupo fornecer o download |
 
 ### 2.2 Lista de ativos (fica em `config/assets.yaml`)
 
@@ -46,14 +46,6 @@ Validação: **walk-forward** com **custos e slippage** (seção 7).
 | eurusd | Dukascopy | `eurusd` | Dólar frente ao euro |
 | usdjpy | Dukascopy | `usdjpy` | Dólar frente ao iene |
 
-Fora do escopo: Merval (negocia no mesmo horário da B3, não traz informação "overnight") e minério de ferro (sem fonte gratuita intradiária).
-
-Decisões da revisão do plano: **não coletar US T-Bond**. TOPIX, CSI 300 e
-Shanghai Composite ficam fora por enquanto: restrições da fonte TOPIX e
-ausência de arquivo M1 gratuito utilizável na janela escolhida para os chineses.
-China A50 e Nikkei são instrumentos distintos, não equivalentes desses índices.
-O DXY foi confirmado em M1 por downloads reais no piloto de 2020 e 2026.
-
 **Período solicitado:** de 2020-09-01 até o último dia útil completo disponível.
 Registrar também o período efetivamente recebido; não encurtar toda a base
 automaticamente por falha de um ativo. A coleta inicial encerra em 2026-10-30
@@ -62,7 +54,7 @@ automaticamente por falha de um ativo. A coleta inicial encerra em 2026-10-30
 ### 2.3 Comando da Dukascopy (referência)
 
 ```bash
-npx dukascopy-node -i usa500idxusd -from 2020-09-01 -to now -t m1 -f csv -v -dir data/raw/dukascopy -ch
+npx dukascopy-node -i usa500idxusd -from 2020-09-01 -to now -t m1 -f csv -v -dir data/raw/feature -ch
 ```
 
 - O horário sai em **UTC** (padrão, `-utc 0`). Não altere.
@@ -72,10 +64,10 @@ npx dukascopy-node -i usa500idxusd -from 2020-09-01 -to now -t m1 -f csv -v -dir
 
 Na implementação, usar a versão local **dukascopy-node 1.51.1**, fixada em
 `package.json` e `package-lock.json`, sem atualizar implicitamente via npx.
-Os scripts `.sh` e `.ps1` chamam o mesmo coordenador Python. Baixar blocos
-mensais com preço bid, volume e cache em `data/`; validar antes de publicar
-cada CSV e registrar SHA256. Piloto separado em `data/raw/dukascopy_pilot/`.
-Datas seguem intervalos `[início, fim)` em UTC. Retomada verifica hashes;
+Baixar blocos
+mensais com preço bid, volume e cache fora do projeto; validar antes de publicar
+cada CSV. Piloto separado em `data/raw/feature_pilot/`.
+Datas seguem intervalos `[início, fim)` em UTC. Retomada revalida o CSV existente;
 arquivo vazio ou malformado não representa download concluído.
 
 ### 2.4 Problemas conhecidos nos dados da B3 (já verificados nos arquivos do professor)
@@ -103,11 +95,11 @@ arquivo vazio ou malformado não representa download concluído.
   - **Abertura observada (`x_open_`):** o gap e sua classe. Do dia D, só usam o `open` do primeiro candle; nunca `high`, `low`, `close` ou `volume` desse candle, nem candles seguintes. Entram apenas nas perguntas 2 e 3, cuja decisão ocorre depois da abertura.
 - Toda normalização, escolha de limiar (ex.: o que é "gap"), seleção de variáveis e ajuste de hiperparâmetros é feita **só com dados de treino** de cada janela do walk-forward.
 - Nunca usar `shift(-1)` ou dados futuros em variáveis. Rótulos usam dados futuros por definição e ficam em colunas com prefixo `y_`.
-- Escrever teste automatizado (`tests/test_leakage.py`) que verifica que: nenhuma variável `x_pre_` usa candle com horário > 08:58 BRT do dia D; nenhuma variável `x_open_` usa do dia D mais que o `open` do primeiro candle; o modelo da pergunta 1 não recebe `x_open_`.
+- O projeto não tem testes automatizados. Estas garantias, e como conferi-las, estão no topo de `src/abertura/features.py` e `src/abertura/models.py`: nenhuma variável `x_pre_` usa candle com horário > 08:58 BRT do dia D; nenhuma variável `x_open_` usa do dia D mais que o `open` do primeiro candle; o modelo da pergunta 1 não recebe `x_open_` (`models.check_features` bloqueia).
 
 ### 3.3 Formato dos arquivos
 
-- `data/raw/` — exatamente como baixado. Nunca editar. Fica no `.gitignore`.
+- `data/raw/` — exatamente como baixado: `feature/` (ativos externos, um CSV por mês) e `target/` (WIN e WDO). Nunca editar. Fica no `.gitignore`.
 - `data/interim/<id>_m1.parquet` — 1 min padronizado: colunas `datetime` (UTC), `open, high, low, close, volume`, ordenado e sem duplicatas.
 - `data/processed/daily.parquet` — uma linha por pregão da B3 e alvo (coluna `asset`): variáveis (`x_pre_`, `x_open_`), rótulos (`y_`), metadados (`is_roll_day`, `has_gap_in_data`, etc.).
 - Parquet via `pyarrow`. CSV só para entregas pequenas em `reports/`.
@@ -125,11 +117,13 @@ package-lock.json
 config/assets.yaml        # lista de ativos, fonte, símbolo, período
 config/params.yaml        # janelas, limiares, custos, slippage, walk-forward
 data/{raw,interim,processed}/   # gitignored
-scripts/                  # downloads e entradas de linha de comando
-src/abertura/
+src/abertura/             # cada etapa roda com `python -m abertura.<módulo>`
+  download.py             # coleta da Dukascopy
   io.py                   # leitura de CSV do MT5 e da Dukascopy -> DataFrame padrão
+  interim.py              # padronização em data/interim/
   clean.py                # datas de rolagem de WIN e WDO
   sessions.py             # calendário de pregões da B3, abertura/fechamento por dia
+  quality.py              # diagnósticos de cobertura e buracos
   features.py             # variáveis x_pre_ e x_open_
   labels.py               # rótulos y_
   daily.py                # monta data/processed/daily.parquet
@@ -137,7 +131,6 @@ src/abertura/
   backtest.py             # walk-forward, regra de operação, custos, métricas
 notebooks/                # só exploração; lógica reutilizável vai para src/
 reports/                  # gráficos e tabelas finais
-tests/
 ```
 
 O roteiro de padronização e auditoria é
@@ -186,13 +179,14 @@ Executar com o grupo uv `notebook`; não levar regras reutilizáveis só para c�
 6. **Backtest:** walk-forward com custos e slippage.
 7. **Relatório final.**
 
-Cada fase termina com: código em `src/`, testes passando, README atualizado e um resumo curto do que foi encontrado.
+Cada fase termina com: código em `src/`, garantias dos módulos conferidas, README atualizado e um resumo curto do que foi encontrado.
 
 ## 9. Regras de trabalho para o agente
 
-- Python 3.11+, ambiente inicial Python 3.12. Gerenciar dependências em `pyproject.toml` e `uv.lock`; executar com `uv run --locked`. `pytest` no grupo `dev`; `MetaTrader5` no extra `mt5`, restrito ao Windows. Adicionar bibliotecas de modelos/visualização nas fases correspondentes. `requirements.txt`, se necessário para entrega, deve ser exportado do lockfile, nunca mantido à mão.
+- Python 3.11+, ambiente inicial Python 3.12. Gerenciar dependências em `pyproject.toml` e `uv.lock`; executar com `uv run --locked`. `MetaTrader5` no extra `mt5`, restrito ao Windows. Adicionar bibliotecas de modelos/visualização nas fases correspondentes. `requirements.txt`, se necessário para entrega, deve ser exportado do lockfile, nunca mantido à mão.
 - Funções pequenas, com type hints e docstrings curtas em português. Nada de lógica importante só em notebook.
 - Nunca inventar dados nem preencher buracos de preço por interpolação. Buraco é marcado e o dia sai da amostra.
 - Antes de mudar uma definição da seção 5, explicar o motivo e atualizar este arquivo.
-- Rodar `pytest` antes de concluir qualquer tarefa.
+- O projeto não tem testes automatizados, por decisão do usuário. Ao alterar um módulo de `src/abertura`, conferir as garantias documentadas no topo dele e mantê-las atualizadas.
+- Manter o controle proporcional ao risco. Validar o que foi baixado e poder retomar já bastam. Não acrescentar logs, registros ou outra infraestrutura sem pedido do usuário, e apagar temporários ao terminar. Caches de ferramentas ficam nos locais padrão do sistema, nunca em `data/`.
 - Quando uma suposição não puder ser verificada (ex.: fuso do servidor MT5, regra de rolagem do WDO), registrar em `README.md` → "Suposições em aberto".

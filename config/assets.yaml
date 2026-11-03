@@ -7,8 +7,8 @@ defaults:
   price_type: bid
   volume_type: provider_specific
 assets:
-  win: {source: professor, symbol: 'WIN$N', role: target, filename: 'WIN$N_M1.csv', timezone: America/Sao_Paulo}
-  wdo: {source: professor, symbol: 'WDO$N', role: target, filename: 'WDO$N_M1.csv', timezone: America/Sao_Paulo}
+  win: {source: professor, symbol: 'WIN$N', role: target, filename: WIN.csv, timezone: America/Sao_Paulo}
+  wdo: {source: professor, symbol: 'WDO$N', role: target, filename: WDO.csv, timezone: America/Sao_Paulo}
   spx: {source: dukascopy, symbol: usa500idxusd, role: feature, description: US 500}
   ndx: {source: dukascopy, symbol: usatechidxusd, role: feature, description: US 100 Tech}
   sx5e: {source: dukascopy, symbol: eusidxeur, role: feature, description: Europe 50}
@@ -22,8 +22,3 @@ assets:
   copper: {source: dukascopy, symbol: coppercmdusd, role: feature, description: Cobre}
   eurusd: {source: dukascopy, symbol: eurusd, role: feature, description: EUR/USD}
   usdjpy: {source: dukascopy, symbol: usdjpy, role: feature, description: USD/JPY}
-excluded:
-  ust: Decisão do usuário; não coletar US T-Bond.
-  topix: Fonte gratuita com restrição de finalidade e compartilhamento.
-  csi300: Sem fonte gratuita M1 utilizável confirmada.
-  shanghai: Fontes gratuitas confirmadas fora do período ou com poucos dias.

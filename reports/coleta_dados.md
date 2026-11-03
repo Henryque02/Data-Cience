@@ -24,7 +24,7 @@ Janela solicitada: `[2020-09-01, 2026-10-31)` UTC, incluindo até 30/10/2026. As
 
 ## WIN e WDO do professor
 
-As cópias em `data/raw/professor/` têm os mesmos hashes dos originais em `gg/`. Os horários abaixo são os gravados no CSV, ainda sem confirmação independente do fuso.
+`WIN.csv` e `WDO.csv`, em `data/raw/target/`, têm os mesmos hashes dos arquivos recebidos, listados abaixo com o nome original. Os horários abaixo são os gravados no CSV, ainda sem confirmação independente do fuso.
 
 | Arquivo | Primeiro registro | Último registro | Candles | Datas observadas |
 |---|---|---|---:|---:|
@@ -40,4 +40,4 @@ As cópias em `data/raw/professor/` têm os mesmos hashes dos originais em `gg/`
 - Download novo do MT5 depende dos arquivos fornecidos pelo colega no Windows. Não houve combinação automática de fontes B3.
 - US T-Bond, TOPIX, CSI 300 e Shanghai Composite ficaram fora da coleta.
 
-Os manifests e a auditoria detalhada ficam em `data/metadata/`. As instruções de execução estão no README.
+As instruções de execução estão no README.

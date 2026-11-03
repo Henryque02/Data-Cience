@@ -87,4 +87,4 @@ O fuso dos CSVs MT5 é uma hipótese configurável, ainda sem confirmação da c
 
 Intervalos externos não são falhas confirmadas: ainda precisamos do calendário e das convenções da fonte CFD. Nenhum preço foi interpolado, nenhum ajuste de rolagem foi aplicado e nenhum dia foi apagado do interim. O padrão de abertura tardia do WIN indica abertura real mais tarde, mas ainda falta confirmação da corretora. A elegibilidade trata só da qualidade dos dados: rolagem e variáveis ainda podem tirar dias da amostra.
 
-Os CSVs brutos são preservados. Proveniência e SHA256 ficam em data/metadata/interim; diagnósticos em data/quality.
+Os CSVs brutos são preservados.

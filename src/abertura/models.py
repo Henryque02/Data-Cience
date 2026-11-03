@@ -1,4 +1,38 @@
-"""Linha de base e regressão logística avaliadas em walk-forward."""
+"""Linha de base e regressão logística avaliadas em walk-forward.
+
+Este projeto não tem testes automatizados. Um erro aqui costuma inflar o acerto
+sem gerar erro nenhum. Ao alterar este módulo, confira as garantias abaixo.
+
+VAZAMENTO (AGENTS.md, seção 3.2; as variáveis estão em `features.py`)
+
+- check_features é a última barreira, e roda sozinha: não remover nem contornar.
+  O modelo do gap aceita só x_pre_, o que também bloqueia x_open_gap e
+  x_open_aligned_. O modelo de comportamento aceita x_pre_ e x_open_. Rótulo y_
+  nunca é aceito.
+- O treino termina antes do teste. Com datas de 2020-01-01 a 2022-08-01, 2 anos
+  de treino e passo de 3 meses, as janelas são 2020-01-01 a 2022-01-01 para testar
+  até 2022-04-01, depois 2020-04-01 a 2022-04-01 para testar até 2022-07-01, e uma
+  terceira a partir de 2022-07-01. Nunca embaralhar no tempo.
+- A escala é ajustada só no treino de cada janela, dentro do pipeline. Não
+  normalizar a tabela antes do walk-forward.
+- Resultado bom demais pede desconfiança. Para conferir, troque cada variável pelo
+  valor do pregão anterior: o log loss do gap deve voltar ao nível da linha de
+  base (no WIN, foi de 0,671 para 0,991, com base em 0,965).
+
+CÁLCULO
+
+- walk_forward_predict: cada data é prevista no máximo uma vez, o que exige
+  test_months igual a step_months. Dia com variável ausente sai da amostra. Classe
+  que não apareceu no treino recebe probabilidade 0, e as colunas seguem CLASSES.
+- add_aligned_features: o retorno mantém o sinal em gap de alta e inverte em gap
+  de baixa. O prefixo x_open_aligned_ é obrigatório, porque a variável depende do
+  gap e precisa continuar bloqueada no modelo do gap.
+- scores: com probabilidades (baixa, normal, alta) de (0,5; 0,25; 0,25) e (0; 1;
+  0), resultado real baixa e alta, e previsões baixa e normal, o acerto é 0,5 e o
+  Brier é ((0,25 + 0,0625 + 0,0625) + (0 + 1 + 1)) / 2 = 1,1875.
+- confusion: linhas são o resultado real, e colunas, o previsto, na ordem de
+  CLASSES. Inverter muda a leitura da matriz sem mudar nenhum número.
+"""
 
 from __future__ import annotations
 
@@ -69,6 +103,7 @@ def walk_forward_predict(
     sample = table.dropna(subset=[target, *features]).sort_index()
     results = []
     for train_start, test_start, test_end in walk_forward_windows(sample.index, train_years, test_months, step_months):
+        # '<' e não '<=': a data inicial do teste não pode estar no treino.
         train = sample[(sample.index >= train_start) & (sample.index < test_start)]
         test = sample[(sample.index >= test_start) & (sample.index < test_end)]
         if test.empty or len(train) < min_train_rows:

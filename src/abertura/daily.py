@@ -1,4 +1,11 @@
-"""Tabela diária por alvo: metadados, variáveis e rótulos."""
+"""Tabela diária por alvo: metadados, variáveis e rótulos.
+
+Este projeto não tem testes automatizados. Toda variável passa por `build_target`,
+então as verificações de vazamento descritas em `features.py` se aplicam a qualquer
+mudança aqui. Além delas, garanta que: x_open_ e y_ só existem em pregões elegíveis;
+dia de rolagem ou sem pregão anterior nos dados não tem gap; e x_pre_ nunca recebe
+dados do dia D do alvo.
+"""
 
 from __future__ import annotations
 

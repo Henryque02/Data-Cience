@@ -1,4 +1,53 @@
-"""Coleta bruta Dukascopy com blocos verificáveis e retomada."""
+"""Coleta bruta Dukascopy com blocos validados e retomada.
+
+Este projeto não tem testes automatizados. Um erro aqui deixa um CSV parcial, vazio, de outro
+ativo ou de outro período passar por completo, sem erro nenhum. Tudo que vem depois (interim,
+variáveis, rótulos) herda o defeito. Ao alterar este módulo, confira as garantias abaixo.
+
+TEMPO (a ferramenta roda com -utc 0; não alterar)
+
+- Todo horário aqui é UTC, em milissegundos. Nada é convertido para Brasília.
+- month_windows divide [início, fim) em meses contíguos e sem sobreposição. De 2024-01-31 a
+  2024-03-02 saem (01-31, 02-01), (02-01, 03-01) e (03-01, 03-02). Fevereiro de 2024 fica
+  inteiro, com o dia 29. Se o fim deixar de ser exclusivo, o último dia vira dia duplicado.
+- Início igual ao fim, ou depois do fim, levanta ValueError.
+- inspect_csv recusa candle fora de [início, fim) em UTC. O CSV de exemplo começa em 1793232000000
+  (2026-10-29 00:00 UTC). Pedir o período 2026-10-28 a 2026-10-29 precisa falhar, porque o dia
+  29 é exclusivo. Timestamp que não é minuto cheio também é recusado.
+
+VALIDAÇÃO DO CSV (inspect_csv, sem alterar o arquivo)
+
+- CSV bom com 3 candles devolve rows = 3, first_utc 2026-10-29T00:00:00+00:00, last_utc
+  2026-10-29T00:02:00+00:00, utc_days = 1 e as colunas timestamp, open, high, low, close, volume.
+- Cada um destes casos precisa levantar DataValidationError: timestamp repetido, linhas fora de
+  ordem, preço nan, high menor que open/close (ex.: high trocado por 1), arquivo só com
+  cabeçalho, cabeçalho diferente (date no lugar de timestamp) e linha incompleta
+  (`1793232180000,1`).
+- Arquivo vazio nunca vale como "sem mercado": ausência de dados não foi comprovada.
+
+PUBLICAÇÃO E RETOMADA (download_chunk)
+
+- O CSV só aparece em raw/ depois de validado. A ferramenta falhar (CalledProcessError) não deixa
+  CSV em raw/. Saída vazia da ferramenta levanta DataValidationError e também não deixa CSV.
+- Bloco já publicado é reaproveitado sem chamar a rede: status 'downloaded' na primeira vez,
+  'skipped' na segunda. Antes de reaproveitar, o CSV passa de novo por inspect_csv.
+- CSV quebrado em raw/ (por exemplo, `broken` no fim) levanta DataValidationError e o arquivo é
+  mantido como está, para inspeção. Nunca apagar nem rebaixar sozinho.
+- Não há registro de hash: uma edição que mantenha o CSV válido, como trocar um preço, não é
+  detectada. Por isso, raw/ nunca deve ser editado.
+- asset_id fora de `[a-z][a-z0-9_]*`, como '../escape', levanta ValueError. Sem isso o caminho
+  escaparia de data/.
+- O comando da ferramenta precisa levar `-t m1 -utc 0 -p bid -v -ch`: candle de 1 min, UTC, preço
+  bid, volume e cache. Mudar qualquer um desloca ou troca a série inteira sem erro.
+
+EXECUÇÃO (main)
+
+- Ctrl+C (SIGINT) não inicia bloco novo e devolve o código 130. Com 4 meses pedidos e um
+  trabalhador, só janeiro roda.
+
+Conferência: o período real recebido de cada ativo aparece na tabela de cobertura do notebook 01.
+Compare com o pedido antes de usar. O calendário e os buracos são auditados em quality.py.
+"""
 
 from __future__ import annotations
 
@@ -6,13 +55,10 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 from datetime import UTC, date, datetime, time, timedelta
-import hashlib
 import json
 import math
-import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import tempfile
 from threading import Event
@@ -21,16 +67,12 @@ from typing import Callable, Iterator
 import yaml
 
 PROJECT = Path(__file__).resolve().parents[2]
-TOOL_VERSION = '1.51.1'
+CACHE = Path.home() / '.cache' / 'abertura-b3'
 FIELDS = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
 
 
 class DataValidationError(ValueError):
     """Arquivo recebido sem dados válidos para o intervalo solicitado."""
-
-
-class IntegrityError(ValueError):
-    """Arquivo bruto ou manifesto diverge da aquisição registrada."""
 
 
 def month_windows(start: date, end: date) -> Iterator[tuple[date, date]]:
@@ -42,12 +84,6 @@ def month_windows(start: date, end: date) -> Iterator[tuple[date, date]]:
         stop = min(next_month, end)
         yield start, stop
         start = stop
-
-
-def sha256(path: Path) -> str:
-    """Calcula o hash sem carregar o arquivo inteiro na memória."""
-    with path.open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def inspect_csv(path: Path, start: date, end: date) -> dict:
@@ -71,6 +107,7 @@ def inspect_csv(path: Path, start: date, end: date) -> dict:
                 prices = [float(row[key]) for key in FIELDS[1:]]
             except (TypeError, ValueError) as exc:
                 raise DataValidationError(f'Linha {number} inválida: {exc}') from exc
+            # Fim exclusivo: um candle em 00:00 do dia final pertence ao bloco seguinte.
             if not lower <= stamp < upper or stamp % 60000:
                 raise DataValidationError(f'Timestamp fora de M1/intervalo na linha {number}')
             if previous is not None and stamp <= previous:
@@ -101,14 +138,6 @@ def inspect_csv(path: Path, start: date, end: date) -> dict:
     }
 
 
-def write_json(path: Path, content: dict) -> None:
-    """Publica metadados atomicamente no mesmo sistema de arquivos."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + '.tmp')
-    temporary.write_text(json.dumps(content, ensure_ascii=False, indent=2) + '\n')
-    temporary.replace(path)
-
-
 def download_chunk(
     root: Path,
     asset_id: str,
@@ -123,40 +152,16 @@ def download_chunk(
     batch_pause_ms: int = 1000,
     retries: int = 3,
 ) -> dict:
-    """Baixa um bloco; reutiliza apenas dados com manifesto e hash válidos."""
+    """Baixa um bloco; arquivo já publicado é revalidado e reaproveitado."""
     if not re.fullmatch(r'[a-z][a-z0-9_]*', asset_id) or start >= end:
         raise ValueError('Identificador ou intervalo inválido.')
     root = root.resolve()
-    scope = 'dukascopy_pilot' if pilot else 'dukascopy'
     name = f'{start.isoformat()}_{end.isoformat()}'
-    output = root / 'raw' / scope / asset_id / f'{name}.csv'
-    manifest = root / 'metadata' / scope / asset_id / f'{name}.json'
-    log = root / 'logs' / scope / asset_id / f'{name}.log'
-    expected = {
-        'schema_version': 1,
-        'asset': asset_id,
-        'symbol': symbol,
-        'start_utc': start.isoformat(),
-        'end_exclusive_utc': end.isoformat(),
-        'timeframe': 'm1',
-        'price_type': 'bid',
-        'utc_offset_minutes': 0,
-        'volume_included': True,
-        'tool': 'dukascopy-node',
-        'tool_version': TOOL_VERSION,
-    }
+    output = root / 'raw' / ('feature_pilot' if pilot else 'feature') / asset_id / f'{name}.csv'
     if output.exists():
-        try:
-            old = json.loads(manifest.read_text())
-        except (OSError, ValueError) as exc:
-            raise IntegrityError(f'CSV sem manifesto válido: {output}') from exc
-        if any(old.get(key) != value for key, value in expected.items()):
-            raise IntegrityError(f'Manifesto incompatível: {manifest}')
-        if old.get('sha256') != sha256(output) or not old.get('rows'):
-            raise IntegrityError(f'Arquivo bruto alterado: {output}')
-        return {**old, 'status': 'skipped'}
+        return {**inspect_csv(output, start, end), 'status': 'skipped'}
 
-    log.parent.mkdir(parents=True, exist_ok=True)
+    # Fica em data/ porque a publicação final só é atômica dentro do mesmo disco.
     staging = root / 'staging'
     staging.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f'{asset_id}-', dir=staging) as folder:
@@ -164,59 +169,24 @@ def download_chunk(
             'node', str(PROJECT / 'node_modules/dukascopy-node/dist/cli/index.js'),
             '-i', symbol, '-from', start.isoformat(), '-to', end.isoformat(),
             '-t', 'm1', '-f', 'csv', '-p', 'bid', '-utc', '0', '-v', '-ch',
-            '-chpath', str(root / 'cache' / 'dukascopy'),
-            '--waf-token-cache-path', str(root / 'cache' / 'dukascopy-waf' / 'token.json'),
+            '-chpath', str(CACHE / 'dukascopy'),
+            '--waf-token-cache-path', str(CACHE / 'dukascopy-waf' / 'token.json'),
             '-dir', folder, '-fn', name,
             '-bs', str(batch_size), '-bp', str(batch_pause_ms), '-r', str(retries),
         ]
-        with log.open('w') as stream:
-            runner(command, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout, check=True)
+        runner(command, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, timeout=timeout, check=True)
         received = Path(folder) / f'{name}.csv'
         if not received.exists():
-            raise DataValidationError(f'Ferramenta não produziu CSV; consulte {log}')
+            raise DataValidationError(f'Ferramenta não produziu CSV: {asset_id} {name}')
         stats = inspect_csv(received, start, end)
-        record = {
-            **expected, **stats,
-            'sha256': sha256(received),
-            'bytes': received.stat().st_size,
-            'downloaded_at_utc': datetime.now(UTC).isoformat(),
-            'csv_path': str(output),
-            'manifest_path': str(manifest),
-            'log_path': str(log),
-            'command': command,
-            'coverage_note': 'Requisição concluída; calendário e buracos serão auditados separadamente.',
-        }
         output.parent.mkdir(parents=True, exist_ok=True)
-        # O CSV é o ponto de confirmação: se os metadados falharem, ele
-        # permanece temporário. Manifesto sem CSV pode ser retomado normalmente.
-        write_json(manifest, record)
         received.replace(output)
-    return {**record, 'status': 'downloaded'}
-
-
-def import_professor(root: Path, source: Path) -> list[dict]:
-    """Copia os arquivos existentes sem modificar seus bytes nem os originais."""
-    records = []
-    for name in ('WIN$N_M1.csv', 'WDO$N_M1.csv'):
-        original = source / name
-        if not original.exists():
-            continue
-        target = root / 'raw' / 'professor' / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        digest = sha256(original)
-        if target.exists() and sha256(target) != digest:
-            raise IntegrityError(f'Cópia do professor já existe com conteúdo diferente: {target}')
-        if not target.exists():
-            shutil.copy2(original, target)
-        records.append({'source': str(original.resolve()), 'path': str(target.resolve()),
-                        'sha256': digest, 'bytes': target.stat().st_size})
-    write_json(root / 'metadata' / 'professor.json', {'files': records})
-    return records
+    return {**stats, 'status': 'downloaded'}
 
 
 def main(argv: list[str] | None = None) -> int:
     """Executa piloto ou histórico e registra sucessos e falhas por bloco."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--config', type=Path, default=PROJECT / 'config/assets.yaml')
     parser.add_argument('--params', type=Path, default=PROJECT / 'config/params.yaml')
     parser.add_argument('--data-dir', type=Path, default=PROJECT / 'data')
@@ -254,12 +224,7 @@ def main(argv: list[str] | None = None) -> int:
 
     root = args.data_dir.resolve()
     root.mkdir(parents=True, exist_ok=True)
-    run_id = datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')
-    summary_path = root / 'metadata' / 'runs' / f'{run_id}.json'
-    summary = {'run_id': run_id, 'pilot': args.pilot, 'start_utc': str(start),
-               'end_exclusive_utc': str(end), 'assets': list(assets),
-               'requested_chunks': len(assets) * len(windows), 'success': [], 'failures': []}
-    write_json(summary_path, summary)
+    summary = {'success': [], 'failures': []}
     stopped = Event()
 
     def collect(asset_id: str, asset: dict) -> tuple[list[dict], list[dict]]:
@@ -293,10 +258,8 @@ def main(argv: list[str] | None = None) -> int:
             summary['success'].extend(successes)
             summary['failures'].extend(failures)
             recorded.add(task)
-            write_json(summary_path, summary)
     except KeyboardInterrupt:
         stopped.set()
-        summary['interrupted'] = True
         for task in tasks:
             task.cancel()
         print('Interrompendo: aguardando apenas os blocos já em andamento.', flush=True)
@@ -309,11 +272,7 @@ def main(argv: list[str] | None = None) -> int:
                 successes, failures = task.result()
                 summary['success'].extend(successes)
                 summary['failures'].extend(failures)
-    summary['finished_at_utc'] = datetime.now(UTC).isoformat()
-    if not stopped.is_set():
-        summary['professor'] = import_professor(root, PROJECT / 'gg')
-    write_json(summary_path, summary)
-    print(f"Resumo: {len(summary['success'])} blocos válidos; {len(summary['failures'])} falhas. {summary_path}")
+    print(f"Resumo: {len(summary['success'])} blocos válidos; {len(summary['failures'])} falhas.")
     if stopped.is_set():
         return 130
     return 1 if summary['failures'] else 0

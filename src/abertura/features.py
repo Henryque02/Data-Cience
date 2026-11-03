@@ -1,4 +1,48 @@
-"""Variáveis pré-abertura (x_pre_) e de abertura observada (x_open_)."""
+"""Variáveis pré-abertura (x_pre_) e de abertura observada (x_open_).
+
+Este projeto não tem testes automatizados. Quem alterar este módulo ou
+`daily.py` precisa conferir à mão as garantias abaixo. Se uma delas quebrar, o
+código continua rodando sem erro, mas o resultado do modelo deixa de valer.
+
+VAZAMENTO (AGENTS.md, seção 3.2)
+
+Vazamento é usar uma informação que ainda não existia na hora da decisão. O
+modelo parece acertar mais, mas está olhando a resposta. Para conferir, rode
+`daily.build_target` duas vezes, mudando só os dados indicados, e compare a
+linha do dia D. Confira sempre o par: a primeira verificação de cada par sozinha
+também passaria se a variável não lesse dado nenhum.
+
+1. x_pre_ não enxerga depois do corte. Dobrar os preços externos depois das
+   08:58 BRT de D e triplicar os preços do dia D inteiro do alvo não pode mudar
+   nenhuma x_pre_ de D.
+2. O corte é mesmo usado. Multiplicar só o close do candle aberto às 08:58 BRT
+   tem de mudar x_pre_<ativo>_overnight.
+3. x_open_ só conhece o open do primeiro candle de D. Mudar high, low, close ou
+   volume desse candle, ou qualquer campo dos candles seguintes, não pode mudar
+   nenhuma x_open_.
+4. Esse open é mesmo usado. Mudá-lo tem de mudar x_open_gap.
+
+CÁLCULO
+
+- last_price: com candles às 11:56, 11:57, 11:58 e 11:59 e closes 1, 2, 3 e 4, o
+  preço às 11:58 e às 11:58:30 é 3; o candle das 11:59 não conta. Candle das
+  10:00 vale às 11:00 com limite de 60 min e vira NaN às 11:01. Sem candle
+  anterior também é NaN. Nunca usar preço posterior nem preencher o buraco.
+- realized_vol: soma só retornos de candles depois do início e até o fim. Com
+  log-preços 0; 0,5; 0,51; 0,54 e 2,0 das 00:00 às 00:04, o intervalo de 00:01 a
+  00:03 dá raiz(0,01² + 0,03²).
+- session_moments: em 2026-03-11, o corte de 08:58 BRT é 11:58 UTC.
+  prev_close_utc e prev2_close_utc são os últimos candles dos dois pregões
+  anteriores do calendário. Se D-1 falta nos dados, prev_close_utc fica vazio:
+  nunca recorrer ao último pregão disponível, pois o gap atravessaria um buraco.
+- asia_session_return: usa o horário local do mercado, nunca BRT. Em Tóquio, das
+  09:00 às 15:30 de 2026-03-10 equivale a 00:00–06:30 UTC.
+- target_features: usa só pregões anteriores a D. Um choque no próprio D não pode
+  mudar a linha de D. Com menos de 5 pregões anteriores, a faixa de 5 dias fica
+  NaN. Mede dentro de cada pregão, para o salto da rolagem não entrar.
+- open_features: dia de rolagem não tem gap, porque o salto entre contratos não é
+  movimento de mercado.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +63,7 @@ def last_price(candles: pd.DataFrame, moments: pd.Series, max_age_minutes: int) 
     """Último close com candle aberto até cada instante; preço antigo vira NaN."""
     times = _nanoseconds(candles.datetime)
     stamps = _nanoseconds(moments)
+    # side='right' inclui o candle aberto no instante; 'left' perderia o candle das 08:58.
     position = np.searchsorted(times, stamps, side='right') - 1
     known = position.clip(0)
     prices = candles.close.to_numpy()[known].astype(float)
@@ -79,6 +124,7 @@ def target_features(candles: pd.DataFrame, dates: pd.DatetimeIndex) -> pd.DataFr
     """Histórico do alvo até D-1, medido dentro dos pregões para ignorar a rolagem."""
     daily = candles.groupby(local_dates(candles)).agg(
         open=('open', 'first'), high=('high', 'max'), low=('low', 'min'), close=('close', 'last'))
+    # shift(1) impede o dia D de entrar na própria variável; removê-lo cria vazamento.
     result = pd.DataFrame({
         'x_pre_target_range_5d': (daily.high / daily.low - 1).rolling(5).mean().shift(1),
         'x_pre_target_return_prev': (daily.close / daily.open - 1).shift(1)})

@@ -1,4 +1,39 @@
-"""Cobertura e intervalos observados, sem inventar preços ou calendários CFD."""
+"""Cobertura e intervalos observados, sem inventar preços ou calendários CFD.
+
+Este projeto não tem testes automatizados. Os erros aqui são de leitura: um buraco real aparece
+como "normal", um buraco normal aparece como falha, ou um preço velho aparece como recente. Nada
+quebra, mas a decisão de manter ou tirar dias sai errada. Ao alterar este módulo, confira as
+garantias abaixo. O calendário e a regra da abertura estão em `sessions.py`.
+
+BURACOS (candle_gaps, missing_runs)
+
+- Nenhum preço é preenchido. Com 5 candles (09:00 a 09:04) e o do meio removido, o buraco tem
+  missing_minutes = 1, classificação 'intraday_investigate' (com calendário B3), e o quadro
+  continua com 4 linhas.
+- Sem calendário da fonte (ativo externo), o mesmo buraco é 'intraday_without_source_calendar'.
+  Não é falha confirmada: CFD tem horários próprios.
+- Com calendário, intervalo entre pregões consecutivos é 'between_sessions' (sexta 2026-09-04
+  para terça 09-08, com feriado na segunda). Só vira 'missing_sessions' se houver pregão do
+  calendário no meio.
+- missing_runs junta ausências consecutivas no calendário, atravessando fim de semana. Pregões
+  ausentes de sexta 2026-03-06 e segunda 03-09 formam uma sequência, com missing_sessions = 2,
+  first_date 03-06 e last_date 03-09. Data ausente fora do calendário levanta ValueError.
+
+ABERTURA TARDIA (late_opens_by_quarter)
+
+- Conta por trimestre só pregões regulares dentro do calendário. Fora da conta ficam a
+  Quarta-feira de Cinzas e o dia fora do calendário (sábado).
+- Exemplo: 03-10 abre às 09:00 e 03-11 às 09:03 (mais Cinzas e um sábado, ignorados), e 04-07
+  abre às 09:00. 2026Q1 = {pregoes: 2, com_atraso: 1, pct: 50.0}. 2026Q2 = {pregoes: 1,
+  com_atraso: 0, pct: 0.0}.
+
+IDADE DO PREÇO NO CORTE (cutoff_staleness)
+
+- Devolve minutos desde o último candle com horário <= corte. Candles em 10:00 e 10:10:
+  corte 10:10 dá 0 (candle exatamente no corte), 10:07 dá 7 (usa o de 10:00), 10:09 dá 9 (o
+  de 10:10 é posterior e é ignorado) e 09:00 dá NaN (sem candle anterior).
+- Se o candle posterior entrasse, o preço usado seria do futuro: vazamento.
+"""
 
 from __future__ import annotations
 
@@ -22,8 +57,7 @@ def missing_runs(missing: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
     starts = np.r_[True, np.diff(positions) != 1] | missing.reason.ne(missing.reason.shift()).to_numpy()
     rows = []
     for _, group in missing.groupby(np.cumsum(starts)):
-        rows.append({'first_date': group.index[0], 'last_date': group.index[-1],
-                     'missing_sessions': len(group), 'reason': group.reason.iloc[0]})
+        rows.append({'first_date': group.index[0], 'last_date': group.index[-1], 'missing_sessions': len(group), 'reason': group.reason.iloc[0]})
     return pd.DataFrame(rows, columns=columns)
 
 
@@ -31,6 +65,7 @@ def cutoff_staleness(times: pd.Series, cutoffs: pd.Series) -> pd.Series:
     """Minutos desde o último candle com datetime <= corte (NaN se não houver)."""
     ordered = np.sort(times.dropna().to_numpy(dtype='datetime64[ns]'))
     cut = cutoffs.to_numpy(dtype='datetime64[ns]')
+    # side='right' aceita o candle exatamente no corte e nunca olha um candle posterior.
     pos = np.searchsorted(ordered, cut, side='right') - 1
     last = ordered[np.clip(pos, 0, None)] if len(ordered) else cut
     age = (cut - last) / np.timedelta64(1, 'm')
@@ -67,14 +102,14 @@ def candle_gaps(
         else:
             has_missing = calendar.index.searchsorted(previous_date, side='right') < calendar.index.searchsorted(next_date, side='left')
             classification = 'missing_sessions' if has_missing else 'between_sessions'
-        rows.append({'previous_utc': previous, 'next_utc': following,
-                     'missing_minutes': int(empty_minutes.iloc[index]), 'classification': classification})
+        rows.append({'previous_utc': previous, 'next_utc': following, 'missing_minutes': int(empty_minutes.iloc[index]), 'classification': classification})
     return pd.DataFrame(rows, columns=['previous_utc', 'next_utc', 'missing_minutes', 'classification'])
 
 
 def late_opens_by_quarter(sessions: pd.DataFrame) -> pd.DataFrame:
     """Conta por trimestre os pregões regulares abertos depois da referência."""
     regular = sessions[sessions.is_expected_session & ~sessions.is_special_open]
+    # Estritamente maior que 0: abrir na referência não é atraso.
     late = regular.open_delay_minutes.gt(0).astype(bool)
     quarters = regular.index.to_period('Q').astype(str)
     result = late.groupby(quarters).agg(pregoes='size', com_atraso='sum')

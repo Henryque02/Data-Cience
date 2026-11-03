@@ -15,8 +15,7 @@ e escolha o Python da pasta `.venv` para executar as células em ordem.
 Na célula de parâmetros, você pode trocar o alvo, o ativo externo, o dia de
 exemplo, o fuso assumido do CSV MT5 e o tamanho dos intervalos a investigar.
 As funções reutilizáveis ficam em `src/abertura`; o notebook é o roteiro e a
-interface de exploração. Reexecutar com as mesmas entradas reaproveita os
-Parquets após conferir hashes e parâmetros.
+interface de exploração. Cada execução refaz os Parquets a partir de `data/raw/`.
 
 ## Ambiente
 
@@ -26,13 +25,13 @@ de Python é 3.12; `uv.lock` e `package-lock.json` fixam as dependências.
 Na raiz do repositório, executar nesta ordem:
 
 ```bash
-uv sync --locked --group notebook --cache-dir data/cache/uv
-npm ci --ignore-scripts --no-audit --no-fund --cache data/cache/npm
-uv run --locked --cache-dir data/cache/uv pytest
+uv sync --locked --group notebook
+npm ci --ignore-scripts --no-audit --no-fund
 ```
 
-O grupo de desenvolvimento instala pytest por padrão. O extra `mt5` é reservado
-ao Windows; a coleta dos externos funciona no Linux. O scikit-learn faz parte
+O projeto não tem testes automatizados. O que precisa ser garantido, e como
+conferir, está no topo de cada módulo em `src/abertura`. O extra `mt5` é
+reservado ao Windows; a coleta dos externos funciona no Linux. O scikit-learn faz parte
 das dependências principais; outras bibliotecas de modelos serão acrescentadas
 quando houver código que as utilize. Caso uma entrega exija requirements.txt:
 
@@ -51,35 +50,29 @@ FTSE 100, Nikkei, China A50, Brent, ouro, DXY, USD/MXN, cobre, EUR/USD e USD/JPY
 São as séries disponíveis na Dukascopy: distinguir seus instrumentos/proxies
 dos índices oficiais e dos futuros negociados em bolsa.
 
-US T-Bond foi excluído pelo usuário. TOPIX, CSI 300 e Shanghai Composite ficam
-fora da coleta atual. As fontes e limitações estão no relatório de pesquisa
-em `reports/Histórico dos índices asiáticos.md`.
-
 ## Ordem da coleta
 
 Primeiro, validar duas amostras de dois dias por ativo, em 2020 e 2026:
 
 ```bash
-uv run --locked --cache-dir data/cache/uv python scripts/download_dukascopy.py --pilot
+uv run --locked python -m abertura.download --pilot
 ```
 
 O piloto efetivamente executado retornou **26 blocos válidos e nenhuma falha**,
 inclusive DXY M1. O cabeçalho real é
 `timestamp,open,high,low,close,volume`: timestamp em milissegundos Unix UTC,
-referente à abertura do candle. A amostra real reduzida está em tests/fixtures.
+referente à abertura do candle.
 
 Depois, coletar o histórico. O limite superior é **exclusivo**; o comando
 abaixo solicita até o fim de 30/10/2026, último dia útil completo quando esta
 coleta começou:
 
 ```bash
-uv run --locked --cache-dir data/cache/uv python scripts/download_dukascopy.py --start 2020-09-01 --end 2026-10-31 --workers 3
+uv run --locked python -m abertura.download --start 2020-09-01 --end 2026-10-31 --workers 3
 ```
 
-Repetir exatamente o comando retoma a coleta: blocos existentes só são
-reutilizados se manifesto, parâmetros e SHA256 corresponderem. Os equivalentes
-são `bash scripts/download_dukascopy.sh ...` e, no PowerShell,
-`.\scripts\download_dukascopy.ps1 ...`.
+Repetir exatamente o comando retoma a coleta: cada CSV existente é validado de
+novo e reaproveitado. Os mesmos comandos valem no Linux e no Windows.
 
 Para atualizar futuramente, omitir `--end` usa o início do dia UTC corrente
 como limite, preservando apenas dias UTC completos. Um mês parcial anterior
@@ -89,22 +82,21 @@ essas sobreposições e rejeitar preços conflitantes, preservando os brutos.
 Para selecionar ativos ou conferir as requisições sem rede:
 
 ```bash
-uv run --locked --cache-dir data/cache/uv python scripts/download_dukascopy.py --assets gold eurusd --start 2026-10-01 --end 2026-10-31 --plan
+uv run --locked python -m abertura.download --assets gold eurusd --start 2026-10-01 --end 2026-10-31 --plan
 ```
 
 ## Arquivos e integridade
 
-- `data/raw/dukascopy/<id>/<início>_<fim-exclusivo>.csv`: saída original da CLI.
-- `data/raw/dukascopy_pilot/<id>/`: amostras do piloto, separadas do histórico.
-- `data/raw/professor/`: cópias idênticas dos arquivos de WIN/WDO em `gg/`.
-- `data/metadata/`: parâmetros, cabeçalhos, períodos recebidos, SHA256 e resultados.
-- `data/logs/`: saída da ferramenta por bloco.
-- `data/cache/dukascopy/`: cache oficial da ferramenta para retomar requisições.
+- `data/raw/feature/<id>/<início>_<fim-exclusivo>.csv`: ativos externos, um CSV por mês.
+- `data/raw/feature_pilot/<id>/`: criada só ao rodar `--pilot`, separada do histórico.
+- `data/raw/target/`: `WIN.csv` e `WDO.csv`, arquivos recebidos do professor.
+- `~/.cache/abertura-b3/`: cache da ferramenta, fora do projeto, para retomar requisições.
 - `data/staging/`: temporários durante a aquisição, publicados após validação.
 
-A importação dos arquivos do professor acontece ao final da coleta. Os
-originais são preservados e seus hashes são registrados. Não juntar preços
-de fontes B3 diferentes antes de comparar os períodos comuns e a continuidade.
+`data/raw/` nunca deve ser editado: o projeto valida o formato dos CSVs, mas não
+guarda hashes, então uma alteração que mantenha o arquivo válido não é detectada.
+Não juntar preços de fontes B3 diferentes antes de comparar os períodos comuns e
+a continuidade.
 
 CSV vazio, preços inválidos, timestamps fora do intervalo, desordem ou
 duplicatas causam falha explícita. Nenhum preço é interpolado. Um bloco
@@ -129,20 +121,14 @@ removidas nos arquivos atuais.
 A mesma conversão do notebook está disponível em:
 
 ```bash
-uv run --locked --cache-dir data/cache/uv python scripts/build_interim.py
+uv run --locked python -m abertura.interim
 ```
-
-Metadados com hashes, parâmetros e contagens ficam em `data/metadata/interim/`.
-Manifests de aquisição existentes também precisam corresponder ao ativo,
-símbolo, M1, UTC, lado bid e presença de volume. Arquivos colocados manualmente
-sem manifesto recebem hash próprio, mas não são descritos como verificados
-contra um registro de aquisição anterior.
 
 ## Auditoria inicial de qualidade
 
 O notebook gerou [o relatório de qualidade](reports/qualidade_dados.md),
-gráficos em `reports/figures/`, contagens pequenas em
-`reports/cobertura_mensal.csv` e tabelas de diagnóstico em `data/quality/`.
+gráficos em `reports/figures/` e contagens pequenas em
+`reports/cobertura_mensal.csv`.
 
 No calendário de referência entre 01/09/2020 e 30/10/2026, foram identificados
 **114 pregões esperados sem registros dentro do histórico de WIN e 91 no de
@@ -159,8 +145,8 @@ contada a partir dele. Um pregão regular é elegível quando esse candle vem at
 15 minutos depois da referência (`sample.max_open_delay_minutes`) e a janela
 não tem minutos faltando. Atrasos maiores indicam dia truncado na fonte. Com
 essa regra, **1.351 pregões de WIN e 1.272 de WDO são elegíveis**, 1.226 nos
-dois ativos. Os dias continuam no interim; a elegibilidade é uma marcação em
-`data/quality/`, e rolagem ou variáveis ainda podem tirar dias da amostra.
+dois ativos. Os dias continuam no interim; a elegibilidade é a marcação `is_eligible`
+da tabela diária, e rolagem ou variáveis ainda podem tirar dias da amostra.
 
 Para os externos, os intervalos vazios não são classificados como falhas
 confirmadas sem o calendário da fonte CFD. Não se usa automaticamente o
@@ -172,7 +158,7 @@ calendário do índice à vista como se fosse o mesmo instrumento.
 `x_pre_` e `x_open_`, rótulos `y_` e marcações como `is_roll_day`. Para gerar:
 
 ```bash
-uv run --locked --cache-dir data/cache/uv python scripts/build_daily.py
+uv run --locked python -m abertura.daily
 ```
 
 O notebook [02_correlacao_e_matriz_confusao.ipynb](notebooks/02_correlacao_e_matriz_confusao.ipynb)
