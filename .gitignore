@@ -8,3 +8,5 @@
 # Python e Jupyter
 __pycache__/
 .ipynb_checkpoints/
+
+/docs

@@ -17,11 +17,5 @@ dependencies = [
   "scikit-learn>=1.5,<2",
 ]
 
-[project.optional-dependencies]
-mt5 = ["MetaTrader5>=5; sys_platform == 'win32'"]
-
-[dependency-groups]
-notebook = ["ipykernel>=6", "nbformat>=5", "nbclient>=0.10", "matplotlib>=3.9"]
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/abertura"]

@@ -1,12 +1,34 @@
-acquisition:
+# Alvos: WIN e WDO exportados do MT5, em horário de Brasília. O primeiro arquivo vale até
+# a véspera de switch_date e o segundo a partir dela (professor até 05/11/2021, Genial depois).
+
+targets:
+  win: {files: [WIN-professor.csv, WIN-metaTrader.csv], switch_date: '2021-11-08', timezone: America/Sao_Paulo}
+  wdo: {files: [WDO-professor.csv, WDO-metaTrader.csv], switch_date: '2021-11-08', timezone: America/Sao_Paulo}
+  
+# Externos: id do projeto -> código na Dukascopy.
+externals:
+  spx: usa500idxusd     # S&P 500
+  ndx: usatechidxusd    # Nasdaq 100
+  sx5e: eusidxeur       # Europe 50
+  ftse: gbridxgbp       # FTSE 100
+  nikkei: jpnidxjpy     # Nikkei 225
+  a50: chiidxusd        # China A50
+  brent: brentcmdusd    # Petróleo Brent
+  gold: xauusd          # Ouro
+  dxy: dollaridxusd     # Dollar Index
+  usdmxn: usdmxn        # USD/MXN
+  copper: coppercmdusd  # Cobre
+  eurusd: eurusd        # EUR/USD
+  usdjpy: usdjpy        # USD/JPY
+# Download dos externos. Começa duas semanas antes do período de análise (sample).
+download:
+  start: '2020-10-01'
   workers: 3
   batch_size: 10
   batch_pause_ms: 1000
   retries: 3
   timeout_seconds: 300
-  pilot_periods:
-    - {start: '2020-09-01', end_exclusive: '2020-09-03'}
-    - {start: '2026-10-29', end_exclusive: '2026-10-31'}
+
 features:
   pre_open:
     cutoff_brt: '08:58'
@@ -16,21 +38,29 @@ features:
     asia_sessions:
       nikkei: {timezone: Asia/Tokyo, start: '09:00', end: '15:30'}
       a50: {timezone: Asia/Shanghai, start: '09:30', end: '15:00'}
+
 sample:
+  # Período de análise: primeiro e último dia comuns a WIN e WDO.
+  start: '2020-10-15'
+  end: '2026-11-06'
   max_open_delay_minutes: 15
+
 labels:
   post_open_minutes: 60
   gap_threshold:
     value: 0.003
   behavior:
     trend_margin: 0.001
+
 models:
   logistic_c: 0.1
+  
 walk_forward:
   train_years: 2
   test_months: 3
   step_months: 3
   min_train_rows: 60
+
 backtest:
   status: pending_future_phase
   entry_rule: next_candle_after_first
