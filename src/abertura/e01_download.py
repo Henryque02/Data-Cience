@@ -6,7 +6,10 @@ Sem --start, começa em download.start (config/params.yaml); sem --end, vai até
 Um fim depois de hoje é recusado, porque o dia corrente ainda está incompleto.
 
 Quem baixa é a ferramenta Node dukascopy-node (versão fixa no package.json), com velas
-de 1 minuto, preço bid, volume e sem cache. Ela grava numa pasta temporária em
+de 1 minuto, preço bid, volume e sem cache. O volume (-v) não é usado, mas é ele que faz
+a ferramenta omitir os minutos sem negócio; sem -v ela inventa velas planas com o último
+preço nos fins de semana e pausas (9.120 a mais no S&P em mar/2024), o que esconderia
+feriados e pausas das etapas seguintes. Ela grava numa pasta temporária em
 data/staging/, e o CSV só vai para data/raw/ se a ferramenta terminar sem erro dentro
 do tempo limite e o arquivo tiver velas. Assim nunca fica arquivo pela metade.
 

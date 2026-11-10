@@ -2,8 +2,8 @@
 
 
 Gera data/tratamento/<ativo>_m1.parquet, um arquivo por ativo, com as colunas datetime
-(UTC), open, high, low, close e volume (float64), ordenado e sem velas repetidas. É
-daqui que todas as etapas seguintes leem.
+(UTC), open, high, low e close (float64), mais volume só em WIN e WDO, ordenado e sem
+velas repetidas. É daqui que todas as etapas seguintes leem.
 
 - WIN e WDO (targets em config/params.yaml): exportação do terminal MetaTrader, arquivo
   separado por TAB, com data e hora sem fuso. O fuso vem de targets (Brasília), e 09:00
@@ -13,8 +13,8 @@ daqui que todas as etapas seguintes leem.
   dela, pela data de Brasília. Hoje é o professor até 05/11/2021 e a Genial desde
   08/11/2021; nos dias em comum as duas fontes eram 99,99% idênticas.
 - Externos (externals): todos os CSVs mensais de data/raw/feature/<ativo>/. O timestamp
-  da Dukascopy já é UTC (milissegundos desde 1970). O volume é o da fonte, não volume
-  real negociado.
+  da Dukascopy já é UTC (milissegundos desde 1970). O volume da fonte é descartado: não
+  é volume real negociado e o AGENTS.md proíbe usá-lo.
 - A junção remove velas idênticas (aparecem quando dois arquivos cobrem os mesmos dias),
   recusa com erro duas velas diferentes no mesmo horário e ordena.
 
@@ -31,15 +31,14 @@ import pandas as pd
 import yaml
 
 PROJECT = Path(__file__).resolve().parents[2]
-STANDARD_COLUMNS = ['datetime', 'open', 'high', 'low', 'close', 'volume']
-VALUE_COLUMNS = STANDARD_COLUMNS[1:]
+PRICE_COLUMNS = ['open', 'high', 'low', 'close']
 
 
-def normalize_candles(frame: pd.DataFrame) -> pd.DataFrame:
-    """Mantém as colunas padrão, com horário em UTC e valores float64."""
-    result = frame[STANDARD_COLUMNS].copy()
+def normalize_candles(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Mantém datetime e as colunas pedidas, com horário em UTC e valores float64."""
+    result = frame[['datetime', *columns]].copy()
     result['datetime'] = result.datetime.dt.tz_convert('UTC').astype('datetime64[ns, UTC]')
-    result[VALUE_COLUMNS] = result[VALUE_COLUMNS].astype('float64')
+    result[columns] = result[columns].astype('float64')
     return result
 
 
@@ -53,14 +52,14 @@ def read_mt5_csv(path: Path, timezone: str) -> pd.DataFrame:
         '<OPEN>': 'open', '<HIGH>': 'high', '<LOW>': 'low', '<CLOSE>': 'close',
         '<VOL>': 'volume',
     })
-    return normalize_candles(frame)
+    return normalize_candles(frame, [*PRICE_COLUMNS, 'volume'])
 
 
 def read_dukascopy_csv(path: Path) -> pd.DataFrame:
     """Lê o CSV da Dukascopy, com timestamp em milissegundos UTC."""
     frame = pd.read_csv(path, encoding='utf-8-sig')
     frame['datetime'] = pd.to_datetime(frame.timestamp, unit='ms', utc=True)
-    return normalize_candles(frame)
+    return normalize_candles(frame, PRICE_COLUMNS)
 
 
 def merge_candles(frames: list[pd.DataFrame]) -> pd.DataFrame:

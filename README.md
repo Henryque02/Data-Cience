@@ -12,8 +12,12 @@ módulos estão em revisão, um por vez, antes da análise exploratória e dos m
 ## Enunciado do professor (quadro)
 
 Transcrição do quadro com os modelos propostos na disciplina; o Modelo 1 não aparece
-na foto. Este projeto é o **Modelo 3**. A classificação pedida no quadro corresponde à
-pergunta 1 do projeto; as perguntas 2 e 3 são extensões do grupo (AGENTS.md, seção 1).
+na foto. Este projeto é o **Modelo 3**. O quadro pede para classificar a abertura em
+normal, gap de alta ou gap de baixa. O projeto **não prevê** essa classe: só ganha o gap
+quem carrega posição da véspera, o que o grupo não faz. A classe é observada na abertura
+e escolhe os dias em que o projeto prevê o comportamento (tendência, reversão ou lateral)
+e a faixa dos primeiros 60 minutos (AGENTS.md, seção 1). É um afastamento consciente do
+enunciado.
 
 **Modelo 2: Previsão T(t+1), tendência**
 
@@ -77,6 +81,7 @@ Os módulos em `src/abertura` são numerados na ordem em que os dados passam por
 | `e05_labels.py` | não (usado pelo e06) | rótulos `y_` |
 | `e06_daily.py` | sim | tabela diária `data/processed/daily.parquet` |
 | `e07_models.py` | não (análise) | modelos, walk-forward e métricas |
+| `analise_tempo.py` | sim (análise) | quanto tempo o gap leva para fechar e quando acontece o pico a favor do gap |
 
 ## Configuração
 
@@ -94,7 +99,7 @@ Tudo fica em `config/params.yaml`:
 |---|---|
 | `data/raw/feature/<ativo>/<início>_<fim>.csv` | externos da Dukascopy, um CSV por mês, UTC, preço bid |
 | `data/raw/target/` | WIN e WDO exportados do MetaTrader (ver abaixo) |
-| `data/tratamento/<ativo>_m1.parquet` | 1 minuto padronizado: `datetime` (UTC), `open`, `high`, `low`, `close`, `volume` |
+| `data/tratamento/<ativo>_m1.parquet` | 1 minuto padronizado: `datetime` (UTC), `open`, `high`, `low`, `close`; `volume` (contratos) só em WIN e WDO |
 | `data/processed/daily.parquet` | uma linha por pregão e alvo, com variáveis, rótulos e marcações |
 | `data/staging/` | temporários do download |
 
@@ -150,28 +155,11 @@ na análise exploratória.
 
 ## Decisões pendentes
 
-### Regra de negociação para `prev_day` e `session`
-
-**Quando decidir:** antes de escolher as variáveis dos modelos.
-
-Cada variável externa só existe se o ativo teve alguma vela no intervalo que ela mede;
-senão fica vazia, em vez de virar zero num feriado lá fora. Para `overnight`,
-`last_60m`, `last_180m` e `night_vol` isso está decidido (28 pregões do WIN ficam com
-algum desses vazios, quase todos feriados lá fora). A mesma regra está aplicada, **ainda
-sem decisão**, ao `prev_day` (vela entre D-2 e D-1) e à `session` asiática (vela no
-pregão local).
-
-Com ela, os pregões elegíveis do WIN com todas as variáveis preenchidas são 1.434 de
-1.493; sem ela, seriam 1.456.
-
-1. Manter (estado atual): mesma lógica para todas as variáveis.
-2. Voltar `prev_day` e `session` a zero em feriado lá fora.
-
 ### Limiar do gap
 
 O AGENTS.md (seção 5) pede que o limiar entre gap e abertura normal seja escolhido só
-com dados de treino. Hoje ele está fixo em 0,3% (`labels.gap_threshold`). Decidir na
-revisão do `e05_labels`.
+com dados de treino. Hoje ele está fixo em 0,3% (`labels.gap_threshold`). Ele define
+quais dias entram na previsão do comportamento. Decidir na revisão do `e05_labels`.
 
 ### Custos
 

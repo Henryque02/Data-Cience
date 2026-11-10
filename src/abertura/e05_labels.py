@@ -5,11 +5,11 @@ definição e nunca entram como variáveis (e07_models.check_features bloqueia).
 
 - opening_window resume a janela de 60 min a partir da primeira vela de D: abertura,
   máxima, mínima e fechamento.
-- gap_class classifica o gap em alta, baixa ou normal pelo limiar de config/params.yaml
-  (0,3%). Gap exatamente no limiar é normal; sem gap válido, o rótulo fica vazio.
-- behavior só existe em dia de gap alta ou baixa. Reversão: o preço toca o fechamento de
-  D-1 na janela. Tendência: a janela fecha mais de 0,1% além da abertura, na direção do
-  gap. Senão, lateral. Reversão tem prioridade, mesmo se o dia também terminar a favor.
+- behavior só existe em dia de gap: gap acima do limiar de config/params.yaml (0,3%)
+  para cima ou para baixo, conhecido na abertura. O gap não é previsto; ele só escolhe os
+  dias e a direção. Reversão: o preço toca o fechamento de D-1 na janela. Tendência: a
+  janela fecha mais de 0,1% além da abertura, na direção do gap. Senão, lateral. Reversão
+  tem prioridade, mesmo se o dia também terminar a favor. Sem gap válido (rolagem), vazio.
 - range_labels mede a máxima e a mínima da janela em relação à abertura (faixa).
 
 As definições completas estão na seção 5 do AGENTS.md.
@@ -34,19 +34,13 @@ def opening_window(candles: pd.DataFrame, sessions: pd.DataFrame, minutes: int) 
     )
 
 
-def gap_class(gap: pd.Series, threshold: float) -> pd.Series:
-    """Classifica o gap; sem gap válido o rótulo fica ausente."""
-    labels = pd.Series('normal', index=gap.index, dtype='object')
-    labels[gap > threshold] = 'alta'
-    labels[gap < -threshold] = 'baixa'
-    return labels.where(gap.notna())
-
-
 def behavior(
-    window: pd.DataFrame, prev_close: pd.Series, classes: pd.Series, trend_margin: float,
+    window: pd.DataFrame, prev_close: pd.Series, gap: pd.Series, threshold: float,
+    trend_margin: float,
 ) -> pd.Series:
     """Só existe em dia com gap relevante; reversão tem prioridade sobre tendência."""
-    up, down = classes.eq('alta'), classes.eq('baixa')
+    # Gap exatamente no limiar não conta; gap vazio (rolagem) compara como falso.
+    up, down = gap > threshold, gap < -threshold
     move = window.close / window.open - 1
     aligned_move = move.where(up, -move)
     touched = (up & window.low.le(prev_close)) | (down & window.high.ge(prev_close))

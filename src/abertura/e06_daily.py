@@ -26,7 +26,7 @@ import pandas as pd
 import yaml
 
 from .e04_features import external_features, last_price, open_features, session_moments, target_features
-from .e05_labels import behavior, gap_class, opening_window, range_labels
+from .e05_labels import behavior, opening_window, range_labels
 from .e03_filtros import b3_sessions, daily_sessions, roll_dates
 
 PROJECT = Path(__file__).resolve().parents[2]
@@ -84,15 +84,10 @@ def _metadata(
 def _labels(
     window: pd.DataFrame, prev_close: pd.Series, gap: pd.Series, settings: dict,
 ) -> pd.DataFrame:
-    """Classifica o gap e o comportamento na janela de abertura."""
-    classes = gap_class(gap, settings['gap_threshold']['value'])
+    """Comportamento na janela de abertura, só nos dias de gap."""
+    threshold = settings['gap_threshold']['value']
     margin = settings['behavior']['trend_margin']
-    return pd.DataFrame(
-        {
-            'y_gap_class': classes,
-            'y_behavior': behavior(window, prev_close, classes, margin),
-        }
-    )
+    return pd.DataFrame({'y_behavior': behavior(window, prev_close, gap, threshold, margin)})
 
 
 def build_daily(project_root: str | Path = PROJECT) -> pd.DataFrame:
@@ -124,7 +119,6 @@ def main() -> int:
     """Gera a tabela e resume a amostra de cada alvo."""
     result = build_daily()
     print(result.groupby('asset')[['is_eligible', 'is_roll_day']].sum().to_string())
-    print(result.groupby('asset').y_gap_class.value_counts().to_string())
     print(result.groupby('asset').y_behavior.value_counts().to_string())
     return 0
 
