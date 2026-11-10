@@ -33,8 +33,12 @@ features:
   pre_open:
     cutoff_brt: '08:58'
     recent_windows_minutes: [60, 180]
-    max_price_age_minutes: 60
-    reference_max_age_minutes: 10080
+    # Preço mais velho que isso fica vazio (7 dias: cobre feriados prolongados lá fora).
+    max_price_age_minutes: 10080
+    # CFDs que trocam de contrato na pausa diária: os retornos ignoram o salto da reabertura
+    # depois de pausas entre 30 min e 12 h (fins de semana são mantidos).
+    daily_pause_assets: [brent, copper]
+    daily_pause_minutes: [30, 720]
     asia_sessions:
       nikkei: {timezone: Asia/Tokyo, start: '09:00', end: '15:30'}
       a50: {timezone: Asia/Shanghai, start: '09:30', end: '15:00'}
@@ -43,7 +47,6 @@ sample:
   # Período de análise: primeiro e último dia comuns a WIN e WDO.
   start: '2020-10-15'
   end: '2026-11-06'
-  max_open_delay_minutes: 15
 
 labels:
   post_open_minutes: 60

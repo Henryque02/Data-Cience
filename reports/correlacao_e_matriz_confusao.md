@@ -1,6 +1,6 @@
 # Correlação e matriz de confusão
 
-Gerado por `notebooks/02_correlacao_e_matriz_confusao.ipynb`. Primeira avaliação: linha de base e regressão logística em walk-forward
+Gerado por `02_correlacao_e_matriz_confusao.ipynb`, apagado em 08/11/2026, com os dados anteriores ao novo download. Primeira avaliação: linha de base e regressão logística em walk-forward
 (treino 2 anos, teste 3 meses, avanço 3 meses, C = 0.1).
 
 ## Pergunta 1: tipo de abertura (`y_gap_class`)
@@ -12,19 +12,19 @@ Período testado:
 
 **WIN**
 
-| configuração | n | acerto | acerto_balanceado | log_loss | brier |
-|---|---|---|---|---|---|
-| Linha de base | 827 | 61.1% | 33.3% | 0.9647 | 0.5701 |
-| Logística núcleo | 827 | 71.3% | 60.7% | 0.6710 | 0.4034 |
-| Logística núcleo + todas x_pre_ | 827 | 69.9% | 60.5% | 0.7363 | 0.4244 |
+| configuração | n | acerto |
+|---|---|---|
+| Linha de base | 827 | 61.1% |
+| Logística núcleo | 827 | 71.3% |
+| Logística núcleo + todas x_pre_ | 827 | 69.9% |
 
 **WDO**
 
-| configuração | n | acerto | acerto_balanceado | log_loss | brier |
-|---|---|---|---|---|---|
-| Linha de base | 727 | 75.9% | 33.3% | 0.7297 | 0.4017 |
-| Logística núcleo | 727 | 82.7% | 58.8% | 0.4933 | 0.2811 |
-| Logística núcleo + todas x_pre_ | 727 | 79.4% | 56.6% | 0.5844 | 0.3268 |
+| configuração | n | acerto |
+|---|---|---|
+| Linha de base | 727 | 75.9% |
+| Logística núcleo | 727 | 82.7% |
+| Logística núcleo + todas x_pre_ | 727 | 79.4% |
 
 Matrizes de confusão da logística núcleo (figura `reports/figures/06_matriz_gap.png`):
 
@@ -53,19 +53,19 @@ Período testado:
 
 **WIN**
 
-| configuração | n | acerto | acerto_balanceado | log_loss | brier |
-|---|---|---|---|---|---|
-| Linha de base | 321 | 36.4% | 33.1% | 1.0979 | 0.6634 |
-| Logística núcleo | 321 | 36.1% | 33.2% | 1.1135 | 0.6781 |
-| Logística núcleo + todas x_pre_ | 321 | 38.0% | 36.0% | 1.4153 | 0.7982 |
+| configuração | n | acerto |
+|---|---|---|
+| Linha de base | 321 | 36.4% |
+| Logística núcleo | 321 | 36.1% |
+| Logística núcleo + todas x_pre_ | 321 | 38.0% |
 
 **WDO**
 
-| configuração | n | acerto | acerto_balanceado | log_loss | brier |
-|---|---|---|---|---|---|
-| Linha de base | 175 | 43.4% | 33.3% | 1.0738 | 0.6507 |
-| Logística núcleo | 175 | 40.6% | 38.3% | 1.1167 | 0.6778 |
-| Logística núcleo + todas x_pre_ | 175 | 38.9% | 36.8% | 1.4566 | 0.7898 |
+| configuração | n | acerto |
+|---|---|---|
+| Linha de base | 175 | 43.4% |
+| Logística núcleo | 175 | 40.6% |
+| Logística núcleo + todas x_pre_ | 175 | 38.9% |
 
 Matrizes de confusão da logística núcleo (figura `reports/figures/07_matriz_comportamento.png`):
 
@@ -107,24 +107,22 @@ Correlação de Pearson entre o retorno overnight de cada ativo e o gap (figura 
 
 ## Conclusões
 
-**Pergunta 1, tipo de abertura.** Só dizemos que há sinal quando o log loss da logística é menor que o da linha de base.
+Comparamos o acerto de cada modelo com o da linha de base, que é o chute pela frequência histórica.
 
-- **WIN, Logística núcleo:** log loss 0.6710 contra 0.9647 da linha de base: há sinal (log loss menor que o da linha de base).
-- **WIN, Logística núcleo + todas x_pre_:** log loss 0.7363 contra 0.9647 da linha de base: há sinal (log loss menor que o da linha de base).
-- **WDO, Logística núcleo:** log loss 0.4933 contra 0.7297 da linha de base: há sinal (log loss menor que o da linha de base).
-- **WDO, Logística núcleo + todas x_pre_:** log loss 0.5844 contra 0.7297 da linha de base: há sinal (log loss menor que o da linha de base).
+**Pergunta 1, tipo de abertura.**
 
-O acerto da logística núcleo foi 71.3% no WIN (linha de base 61.1%) e 82.7% no WDO (linha de base 75.9%). Acertar a classe mais comum não prova nada; olhe o log loss e a diagonal da matriz.
+- **WIN:** linha de base 61.1%; logística núcleo 71.3%; logística todas x_pre_ 69.9%.
+- **WDO:** linha de base 75.9%; logística núcleo 82.7%; logística todas x_pre_ 79.4%.
+
+A logística núcleo fica +10.3 pontos no WIN e +6.7 pontos no WDO em relação à linha de base: **há sinal**. Na matriz de confusão, o modelo raramente troca alta por baixa; o erro mais comum é prever normal em dia de gap.
 
 **Pergunta 2, comportamento depois da abertura.**
 
-- **WIN, Logística núcleo:** log loss 1.1135 contra 1.0979 da linha de base: sem sinal (log loss igual ou maior que o da linha de base).
-- **WIN, Logística núcleo + todas x_pre_:** log loss 1.4153 contra 1.0979 da linha de base: sem sinal (log loss igual ou maior que o da linha de base).
-- **WDO, Logística núcleo:** log loss 1.1167 contra 1.0738 da linha de base: sem sinal (log loss igual ou maior que o da linha de base).
-- **WDO, Logística núcleo + todas x_pre_:** log loss 1.4566 contra 1.0738 da linha de base: sem sinal (log loss igual ou maior que o da linha de base).
+- **WIN:** linha de base 36.4%; logística núcleo 36.1%; logística todas x_pre_ 38.0%.
+- **WDO:** linha de base 43.4%; logística núcleo 40.6%; logística todas x_pre_ 38.9%.
 
-O acerto da logística núcleo foi 36.1% no WIN (linha de base 36.4%) e 40.6% no WDO (linha de base 43.4%).
+A logística núcleo fica -0.3 pontos no WIN e -2.9 pontos no WDO em relação à linha de base: **não há sinal**. A versão com todas as variáveis fica +1.6 pontos no WIN e -4.6 pontos no WDO: com centenas de dias apenas, diferenças desse tamanho não sustentam um sinal.
 
 **Acertar o gap não é oportunidade de lucro.** Às 09:00 o gap já aconteceu e não dá para operá-lo. O que importaria para operar é a pergunta 2: saber se o preço segue, volta ou fica parado depois da abertura.
 
-**Limites.** Esta é só a primeira avaliação. Não há gradient boosting, não há curva de calibração e não há backtest com custos e slippage (a diferença entre o preço esperado e o executado). Um log loss menor que o da linha de base ainda não é uma regra lucrativa.
+**Limites.** Esta é só a primeira avaliação. Não há gradient boosting, não há curva de calibração e não há backtest com custos e slippage (a diferença entre o preço esperado e o executado). Acertar mais que a linha de base ainda não é uma regra lucrativa.

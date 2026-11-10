@@ -1,209 +1,194 @@
 # Classificação da abertura da B3
 
-Projeto da disciplina Data Science para Mercado Financeiro, UFG. A coleta
-preserva informações internacionais anteriores à abertura e candles M1 de
-WIN/WDO para estudar o comportamento posterior. Já há tabela diária e uma
-primeira avaliação em walk-forward; o backtest com custos fica para uma fase futura.
+Projeto da disciplina Data Science para Mercado Financeiro (UFG). Usa o que acontece
+no exterior entre o fechamento da B3 e a abertura do dia seguinte para prever os
+primeiros 60 minutos do pregão do mini índice (WIN) e do mini dólar (WDO). As
+definições e regras completas estão no [AGENTS.md](AGENTS.md).
 
-## Começar pelo notebook
+**Estado atual:** os dados estão coletados, tratados e reunidos na tabela diária. Os
+módulos estão em revisão, um por vez, antes da análise exploratória e dos modelos (ver
+"Para onde vai o projeto").
 
-O roteiro desta etapa é [01_dados_e_qualidade.ipynb](notebooks/01_dados_e_qualidade.ipynb).
-Ele já está executado, com amostras reais, conversão de horário, os 15 Parquets,
-mapa de cobertura mensal e diagnósticos de WIN/WDO. Abra no VS Code/Jupyter
-e escolha o Python da pasta `.venv` para executar as células em ordem.
+## Enunciado do professor (quadro)
 
-Na célula de parâmetros, você pode trocar o alvo, o ativo externo, o dia de
-exemplo, o fuso assumido do CSV MT5 e o tamanho dos intervalos a investigar.
-As funções reutilizáveis ficam em `src/abertura`; o notebook é o roteiro e a
-interface de exploração. Cada execução refaz os Parquets a partir de `data/raw/`.
+Transcrição do quadro com os modelos propostos na disciplina; o Modelo 1 não aparece
+na foto. Este projeto é o **Modelo 3**. A classificação pedida no quadro corresponde à
+pergunta 1 do projeto; as perguntas 2 e 3 são extensões do grupo (AGENTS.md, seção 1).
 
-## Ambiente
+**Modelo 2: Previsão T(t+1), tendência**
 
-Usar [uv](https://docs.astral.sh/uv/) e Node.js 22 ou superior. A versão inicial
-de Python é 3.12; `uv.lock` e `package-lock.json` fixam as dependências.
+- Gráfico do preço ($) no tempo, com faixas. Em t+1, um leque de trajetórias
+  possíveis. Método citado: SARIMAX.
+- Dois candles com abertura (O), fechamento (C), máxima (Mx) e mínima (Mn):
+  um de alta (O embaixo, C em cima) e um de baixa (O em cima, C embaixo).
+- Desenho de uma linha que se divide em duas (bifurcação).
+- Saída:
+  - f(x) = ALTA: máxima esperada, % de probabilidade, mínima esperada.
+  - NDA (nada).
+  - BAIXA: mínima, % de probabilidade, máxima.
 
-Na raiz do repositório, executar nesta ordem:
+**Modelo 3: Classificação de abertura**
+
+- B3 (9h → 18h).
+- Bolsas globais, europeias e americanas: principais índices.
+- B3 = f(B1, B2, B3, …).
+- B3 → {Normal, Gap alta, Gap baixa}.
+
+**Modelo 4: Classificação por indicadores técnicos**
+
+- {ALTA, BAIXA, NDA}: R = f(I1, I2, …, In).
+
+## Como rodar
+
+Requer [uv](https://docs.astral.sh/uv/) e Node.js 22 ou superior. Na raiz do repositório:
 
 ```bash
-uv sync --locked --group notebook
+uv sync --locked
 npm ci --ignore-scripts --no-audit --no-fund
 ```
 
-O projeto não tem testes automatizados. O que precisa ser garantido, e como
-conferir, está no topo de cada módulo em `src/abertura`. O extra `mt5` é
-reservado ao Windows; a coleta dos externos funciona no Linux. O scikit-learn faz parte
-das dependências principais; outras bibliotecas de modelos serão acrescentadas
-quando houver código que as utilize. Caso uma entrega exija requirements.txt:
+Depois, as três etapas, nesta ordem:
 
 ```bash
-uv export --locked --no-dev --format requirements.txt --output-file requirements.txt
+uv run --locked python -m abertura.e01_download --end 2026-11-07   # externos (~16 min)
+uv run --locked python -m abertura.e02_tratamento                   # Parquets (~40 s)
+uv run --locked python -m abertura.e06_daily                        # tabela diária (~5 s)
 ```
 
-O grupo `notebook` contém ipykernel, nbformat, nbclient e matplotlib. O
-calendário é `exchange-calendars/BVMF`, fixado no lockfile. NumPy fica abaixo
-de 2.5 para evitar a descontinuação de timedelta genérico usada pelo pandas 2.x.
+- O `e01` baixa de 01/10/2020 (`download.start`) até o dia anterior ao `--end`, que é
+  exclusivo. Rodar de novo pula os meses já baixados. `--assets spx gold` baixa só alguns.
+- WIN e WDO não são baixados: vêm de `data/raw/target/` (ver "Dados").
+- O projeto não tem testes automatizados. Cada módulo começa com um texto que explica o
+  que faz e como.
+- Se uma entrega exigir `requirements.txt`:
+  `uv export --locked --no-dev --format requirements.txt --output-file requirements.txt`.
 
-## Ativos definidos
+## Módulos
 
-`config/assets.yaml` contém os 13 externos: S&P 500, Nasdaq 100, Europe 50,
-FTSE 100, Nikkei, China A50, Brent, ouro, DXY, USD/MXN, cobre, EUR/USD e USD/JPY.
-São as séries disponíveis na Dukascopy: distinguir seus instrumentos/proxies
-dos índices oficiais e dos futuros negociados em bolsa.
+Os módulos em `src/abertura` são numerados na ordem em que os dados passam por eles
+(`e` de etapa; nome de módulo Python não pode começar com número):
 
-## Ordem da coleta
+| Módulo | Comando? | Faz |
+|---|---|---|
+| `e01_download.py` | sim | baixa os externos da Dukascopy para `data/raw/feature/` |
+| `e02_tratamento.py` | sim | lê os CSVs, converte para UTC, emenda WIN/WDO e grava um Parquet por ativo em `data/tratamento/` |
+| `e03_filtros.py` | não (usado pelo e06) | calendário da B3, pregões elegíveis e dias de rolagem |
+| `e04_features.py` | não (usado pelo e06) | variáveis `x_pre_` e `x_open_` |
+| `e05_labels.py` | não (usado pelo e06) | rótulos `y_` |
+| `e06_daily.py` | sim | tabela diária `data/processed/daily.parquet` |
+| `e07_models.py` | não (análise) | modelos, walk-forward e métricas |
 
-Primeiro, validar duas amostras de dois dias por ativo, em 2020 e 2026:
+## Configuração
 
-```bash
-uv run --locked python -m abertura.download --pilot
-```
+Tudo fica em `config/params.yaml`:
 
-O piloto efetivamente executado retornou **26 blocos válidos e nenhuma falha**,
-inclusive DXY M1. O cabeçalho real é
-`timestamp,open,high,low,close,volume`: timestamp em milissegundos Unix UTC,
-referente à abertura do candle.
+- `targets`: WIN e WDO, os dois arquivos de cada um, a data de troca entre eles e o fuso.
+- `externals`: os 13 ativos externos e o código de cada um na Dukascopy.
+- `download`: início, paralelismo, tentativas e tempo limite da coleta.
+- `features`, `sample`, `labels`, `models`, `walk_forward`, `backtest`: parâmetros das
+  etapas seguintes. O período de análise (`sample`) vai de 15/10/2020 a 06/11/2026.
 
-Depois, coletar o histórico. O limite superior é **exclusivo**; o comando
-abaixo solicita até o fim de 30/10/2026, último dia útil completo quando esta
-coleta começou:
+## Dados
 
-```bash
-uv run --locked python -m abertura.download --start 2020-09-01 --end 2026-10-31 --workers 3
-```
+| Pasta | Conteúdo |
+|---|---|
+| `data/raw/feature/<ativo>/<início>_<fim>.csv` | externos da Dukascopy, um CSV por mês, UTC, preço bid |
+| `data/raw/target/` | WIN e WDO exportados do MetaTrader (ver abaixo) |
+| `data/tratamento/<ativo>_m1.parquet` | 1 minuto padronizado: `datetime` (UTC), `open`, `high`, `low`, `close`, `volume` |
+| `data/processed/daily.parquet` | uma linha por pregão e alvo, com variáveis, rótulos e marcações |
+| `data/staging/` | temporários do download |
 
-Repetir exatamente o comando retoma a coleta: cada CSV existente é validado de
-novo e reaproveitado. Os mesmos comandos valem no Linux e no Windows.
+Toda a pasta `data/` fica fora do Git. `data/raw/` nunca é editado.
 
-Para atualizar futuramente, omitir `--end` usa o início do dia UTC corrente
-como limite, preservando apenas dias UTC completos. Um mês parcial anterior
-pode se sobrepor ao novo mês solicitado; a padronização futura deve conciliar
-essas sobreposições e rejeitar preços conflitantes, preservando os brutos.
+**WIN e WDO** emendam duas exportações do terminal MetaTrader, em horário de Brasília:
 
-Para selecionar ativos ou conferir as requisições sem rede:
+- `WIN-professor.csv` e `WDO-professor.csv`: arquivos do professor, usados até 05/11/2021.
+- `WIN-metaTrader.csv` e `WDO-metaTrader.csv`: séries `WIN$N` e `WDO$N` exportadas do
+  MT5 da Genial em 08/11/2026, usadas a partir de 08/11/2021. A Genial guarda só cerca
+  de 5 anos; por isso o começo vem do professor. Nos dias em comum, 99,99% das velas
+  das duas fontes são idênticas.
 
-```bash
-uv run --locked python -m abertura.download --assets gold eurusd --start 2026-10-01 --end 2026-10-31 --plan
-```
+**Externos:** S&P 500, Nasdaq 100, Europe 50, FTSE 100, Nikkei, China A50, Brent, ouro,
+DXY, USD/MXN, cobre, EUR/USD e USD/JPY. São CFDs da Dukascopy, não os índices oficiais
+nem os futuros em bolsa. O volume da Dukascopy não é volume real negociado.
 
-## Arquivos e integridade
+**Rolagem do Brent e do cobre:** esses dois CFDs seguem o contrato futuro e trocam de
+vencimento na pausa diária da Dukascopy, com um salto falso de preço (no Brent, em média
+−0,9% e até −7% em 2026, quando a curva do petróleo ficou extremamente inclinada). Os
+retornos desses dois ignoram a variação de toda reabertura depois de pausa de 30 min a
+12 h (`daily_pause_assets` em `config/params.yaml`); a reabertura de fim de semana é
+mantida, porque concentra notícia real (ex.: +16% em 09/03/2026, guerra com o Irã).
+Custo: perde o movimento real da pausa, em média 0,2% no Brent e 0,04% no cobre.
 
-- `data/raw/feature/<id>/<início>_<fim-exclusivo>.csv`: ativos externos, um CSV por mês.
-- `data/raw/feature_pilot/<id>/`: criada só ao rodar `--pilot`, separada do histórico.
-- `data/raw/target/`: `WIN.csv` e `WDO.csv`, arquivos recebidos do professor.
-- `~/.cache/abertura-b3/`: cache da ferramenta, fora do projeto, para retomar requisições.
-- `data/staging/`: temporários durante a aquisição, publicados após validação.
+**Amostra no período de análise:** 1.510 pregões, todos com dados nos dois alvos.
 
-`data/raw/` nunca deve ser editado: o projeto valida o formato dos CSVs, mas não
-guarda hashes, então uma alteração que mantenha o arquivo válido não é detectada.
-Não juntar preços de fontes B3 diferentes antes de comparar os períodos comuns e
-a continuidade.
+| | WIN | WDO |
+|---|---:|---:|
+| Pregões elegíveis | 1.493 | 1.498 |
+| Fora por Quarta-feira de Cinzas | 6 | 6 |
+| Fora por janela de abertura incompleta | 10 | 6 |
+| Fora por ser o 1º dia do histórico (15/10/2020) | 1 | 0 |
+| Dias de rolagem (gap vazio) | 36 | 73 |
 
-CSV vazio, preços inválidos, timestamps fora do intervalo, desordem ou
-duplicatas causam falha explícita. Nenhum preço é interpolado. Um bloco
-recebido com sucesso **não comprova cobertura integral dos pregões**: feriados,
-pausas normais, dias sem candles e buracos serão auditados na limpeza.
-O volume é específico da fonte e não deve ser interpretado como volume
-negociado real dos ativos de referência. `SPREAD` dos arquivos do professor
-não será usado como variável.
+`reports/` guarda resultados de uma análise anterior à emenda e ao download atual (relatório
+de qualidade, correlações, matrizes de confusão, gráficos e uma pesquisa de índices
+asiáticos não adotados). Os números ali não refletem os dados atuais e serão refeitos
+na análise exploratória.
 
-Todo `data/` está ignorado no Git. Os brutos foram convertidos para os 15
-arquivos `data/interim/<id>_m1.parquet`, com compressão Zstandard via pyarrow.
-O schema tem seis colunas: datetime (datetime64[ns, UTC]), open, high, low,
-close e volume (float64). Os dados estão ordenados e sem duplicatas.
+## Para onde vai o projeto
 
-Os leitores em `src/abertura/io.py` distinguem CSV TAB do MT5, exportação da
-API MT5 (epoch em segundos UTC) e Dukascopy (epoch em milissegundos UTC).
-O CSV do professor usa `<VOL>`, sem substituição silenciosa por `<TICKVOL>`.
-Apenas duplicatas integralmente idênticas são removidas; preço ou volume
-conflitante no mesmo timestamp interrompe a conversão. Não houve duplicatas
-removidas nos arquivos atuais.
+1. **Revisão dos módulos (em andamento):** `e01` a `e04` revisados; faltam `e05_labels`,
+   `e06_daily` e `e07_models`.
+2. **Decisões pendentes** (abaixo), antes de escolher as variáveis dos modelos.
+3. **Análise exploratória:** correlações, distribuição dos gaps e taxas de fechamento do
+   gap, com os dados atuais.
+4. **Modelos:** linhas de base e regressão logística, depois gradient boosting, com
+   probabilidades calibradas, em walk-forward (2 anos de treino, 3 meses de teste).
+5. **Backtest** (`e08_backtest.py`, ainda não existe): entrada na vela seguinte à
+   abertura, alvo e stop pela faixa prevista, custos e slippage.
+6. **Relatório final.**
 
-A mesma conversão do notebook está disponível em:
+## Decisões pendentes
 
-```bash
-uv run --locked python -m abertura.interim
-```
+### Regra de negociação para `prev_day` e `session`
 
-## Auditoria inicial de qualidade
+**Quando decidir:** antes de escolher as variáveis dos modelos.
 
-O notebook gerou [o relatório de qualidade](reports/qualidade_dados.md),
-gráficos em `reports/figures/` e contagens pequenas em
-`reports/cobertura_mensal.csv`.
+Cada variável externa só existe se o ativo teve alguma vela no intervalo que ela mede;
+senão fica vazia, em vez de virar zero num feriado lá fora. Para `overnight`,
+`last_60m`, `last_180m` e `night_vol` isso está decidido (28 pregões do WIN ficam com
+algum desses vazios, quase todos feriados lá fora). A mesma regra está aplicada, **ainda
+sem decisão**, ao `prev_day` (vela entre D-2 e D-1) e à `session` asiática (vela no
+pregão local).
 
-No calendário de referência entre 01/09/2020 e 30/10/2026, foram identificados
-**114 pregões esperados sem registros dentro do histórico de WIN e 91 no de
-WDO**. Os limites anteriores e posteriores à cobertura de cada fonte ficam
-separados dessas ausências internas.
+Com ela, os pregões elegíveis do WIN com todas as variáveis preenchidas são 1.434 de
+1.493; sem ela, seriam 1.456.
 
-O calendário BVMF fornece datas e aberturas especiais. Seu horário de ações
-não é aplicado aos futuros: a referência regular de WIN/WDO é 09:00 BRT,
-com 13:00 na Quarta-feira de Cinzas. O último candle é medido dia a dia,
-sem impor fechamento fixo.
+1. Manter (estado atual): mesma lógica para todas as variáveis.
+2. Voltar `prev_day` e `session` a zero em feriado lá fora.
 
-A abertura de cada dia é o primeiro candle observado, e a janela inicial é
-contada a partir dele. Um pregão regular é elegível quando esse candle vem até
-15 minutos depois da referência (`sample.max_open_delay_minutes`) e a janela
-não tem minutos faltando. Atrasos maiores indicam dia truncado na fonte. Com
-essa regra, **1.351 pregões de WIN e 1.272 de WDO são elegíveis**, 1.226 nos
-dois ativos. Os dias continuam no interim; a elegibilidade é a marcação `is_eligible`
-da tabela diária, e rolagem ou variáveis ainda podem tirar dias da amostra.
+### Limiar do gap
 
-Para os externos, os intervalos vazios não são classificados como falhas
-confirmadas sem o calendário da fonte CFD. Não se usa automaticamente o
-calendário do índice à vista como se fosse o mesmo instrumento.
+O AGENTS.md (seção 5) pede que o limiar entre gap e abertura normal seja escolhido só
+com dados de treino. Hoje ele está fixo em 0,3% (`labels.gap_threshold`). Decidir na
+revisão do `e05_labels`.
 
-## Tabela diária e matriz de confusão
+### Custos
 
-`data/processed/daily.parquet` tem uma linha por pregão e alvo, com variáveis
-`x_pre_` e `x_open_`, rótulos `y_` e marcações como `is_roll_day`. Para gerar:
-
-```bash
-uv run --locked python -m abertura.daily
-```
-
-O notebook [02_correlacao_e_matriz_confusao.ipynb](notebooks/02_correlacao_e_matriz_confusao.ipynb)
-mostra a rolagem, as correlações e as matrizes de confusão, em walk-forward de
-2 anos de treino e 3 meses de teste. Os números estão no
-[relatório](reports/correlacao_e_matriz_confusao.md).
-
-O tipo de abertura tem sinal nos dois alvos: o log loss cai de 0,965 para 0,671
-no WIN e de 0,730 para 0,493 no WDO, contra a linha de base. O comportamento
-depois da abertura não tem sinal nesta primeira avaliação: o log loss da
-regressão logística fica acima da linha de base nos dois alvos. Ainda faltam
-gradient boosting, curva de calibração e backtest com custos.
+Emolumentos e corretagem por contrato estão vazios em `backtest.contracts`. Precisam
+ser definidos antes do backtest.
 
 ## Suposições em aberto
 
-- Fuso dos CSVs do professor: hipótese America/Sao_Paulo. A abertura mais
-  frequente é 09:00 nos dois ativos, coerente internamente com a hipótese;
-  falta confirmação independente com a corretora. A API Python MT5 retorna
-  UTC, um formato distinto.
-- Símbolos e profundidade do histórico MT5 dependem da corretora do grupo;
-  aguardar os arquivos do amigo que opera o terminal no Windows.
-- Rolagem: as datas de WIN e WDO vêm de regra de calendário confirmada nos gaps
-  da série, sem ajustar preços. A causa exata da troca do WDO um pregão antes do
-  vencimento não foi confirmada com a corretora. Possíveis mudanças de contrato
-  nos instrumentos externos não foram investigadas.
-- Disponibilidade dos externos: no corte de 08:58 BRT, de 98,7% a 100% dos
-  pregões têm preço com até 5 minutos, conforme o ativo. Acima de 60 minutos a
-  idade salta para dias inteiros. As datas parecem feriados daquele mercado, mas
-  não foram conferidas em calendário, e o EUR/USD tem uma falha aparente em
-  2024-12-05.
-- O padrão da ferramenta omite candles de volume zero; ausência de candle
-  pode representar essa regra, fechamento normal ou falha. Não inferir a causa
-  antes da auditoria por instrumento.
-- Abertura tardia: o primeiro candle veio depois das 09:00 em até 74% dos
-  pregões recentes do WIN (tabela por trimestre no relatório de qualidade). A
-  hipótese é abertura real mais tarde, apoiada pelo volume até 09:10 e pelo WDO
-  abrir às 09:00 nesses dias. Falta confirmar com a corretora ou o professor; se
-  for falha da fonte, a regra de entrada e a elegibilidade precisam ser revistas.
-- Custos reais, rótulos de comportamento e regra de saída continuam pendentes;
-  valores iniciais em config/params.yaml não representam estratégia validada.
-
-## Resultado da coleta inicial
-
-Em 02/11/2026, o histórico solicitado foi concluído: **962 blocos, 26.228.157 candles e 1.45 GB de CSV**, nos 13 ativos, sem falhas. Os hashes dos 962 blocos, dos 26 arquivos do piloto e das duas cópias do professor foram conferidos. Veja [períodos e quantidades por ativo](reports/coleta_dados.md).
-
-A padronização reuniu **27.703.105 candles nos 15 Parquets UTC**, incluindo
-WIN/WDO do professor. A auditoria inicial e os gráficos estão salvos no
-notebook.
+- **Fuso das exportações do MetaTrader:** assumido como Brasília. É coerente com os dados
+  (abertura às 09:00, 13:00 na Quarta-feira de Cinzas), mas falta confirmação da corretora.
+- **Abertura tardia do WIN:** desde out/2025, o primeiro candle costuma sair às 09:02 ou
+  09:03. O volume até 09:10 indica abertura real mais tarde, não candles perdidos. As duas
+  fontes mostram o mesmo padrão, mas vêm do mesmo feed, então isso não é confirmação.
+- **Rolagem do WDO:** a série troca no último pregão do mês, um dia antes do vencimento.
+  A regra é confirmada nos dados, mas a causa não foi confirmada com a corretora.
+- **Histórico da Genial:** a hipótese é que a corretora guarda só os últimos 5 anos. Uma
+  nova exportação perderia o começo.
+- **Dukascopy:** os dias mais recentes ainda podem ganhar velas depois; a ferramenta omite
+  velas de volume zero. Uma parada da fonte no meio da noite é indistinguível de uma
+  parada do mercado.
