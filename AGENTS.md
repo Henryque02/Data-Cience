@@ -6,12 +6,13 @@ Trabalho da disciplina "Data Science para Mercado Financeiro" (UFG). Leia este a
 
 Usar o que acontece **entre o fechamento da B3 e a abertura do dia seguinte** (bolsas estrangeiras, câmbio, commodities, juros) para prever o comportamento dos **primeiros minutos do pregão** do mini índice (WIN) e do mini dólar (WDO), e transformar isso numa regra de day trade.
 
-O modelo responde duas perguntas, as duas na abertura, com o gap já conhecido (janela padrão: 60 min, parametrizável):
+O modelo responde três perguntas:
 
-1. **Comportamento depois da abertura**, só em dia de gap de alta ou de baixa, como probabilidades: **tendência** (o preço segue a direção do gap: operar a favor), **reversão** (o preço volta ao fechamento de D-1: operar contra o gap) ou **lateral** (não operar). Abertura normal não gera operação. É esta pergunta que decide a operação.
-2. **Faixa operacional**, prevista no mesmo momento e na mesma janela: até onde o preço sobe e até onde desce, **medido a partir da abertura**. Define alvo e stop.
+1. **Tipo de abertura** (entrega principal: é a classificação pedida no quadro do professor), prevista antes da abertura, só com dados até 08:58 BRT: gap de alta, gap de baixa ou normal, como probabilidades. É onde o exterior tem sinal forte: na amostra, os 13 ativos externos explicam cerca de 61% do gap do WIN e 53% do gap do WDO. Sozinha não gera operação (ver abaixo).
+2. **Comportamento depois da abertura**, previsto na abertura, com o gap já conhecido (janela padrão: 60 min, parametrizável), como probabilidades: **tendência** (o preço segue a direção do gap: operar a favor), **reversão** (o preço volta ao fechamento de D-1: operar contra o gap) ou **lateral** (não operar). Abertura normal também não gera operação. É a pergunta que decidiria a operação.
+3. **Faixa operacional**, prevista no mesmo momento e na mesma janela: até onde o preço sobe e até onde desce, **medido a partir da abertura**. Define alvo e stop.
 
-**O gap não é previsto** (decisão de 2026-11-10). O preço de abertura sai do leilão de pré-abertura, e só ganha o gap quem já estava posicionado na véspera; o grupo não carrega posição de um dia para o outro, então prever o gap não gera operação. O gap **observado** na abertura e sua classe (alta / baixa / normal) escolhem os dias e a direção da pergunta 1 e entram como variável nas duas perguntas. O quadro do professor pede a classificação do gap (README); essa diferença em relação ao enunciado é consciente.
+Por que prever o gap não gera operação: o preço de abertura sai do leilão de pré-abertura, e só ganha o gap quem já estava posicionado na véspera; o grupo não carrega posição de um dia para o outro. As perguntas 2 e 3 investigam se sobra algo operável depois da abertura. Até aqui os dados mostram pouco: depois da entrada, a correlação do movimento externo da madrugada com o movimento de WIN e WDO fica entre −0,08 e +0,09 em qualquer trecho (5 min a fim do dia). O gap **observado** entra como variável nas perguntas 2 e 3.
 
 Por que a faixa parte da abertura, e não do fechamento de D-1: alvo e stop são distâncias a partir da entrada, que fica junto da abertura. Medida do fechamento, a faixa incluiria o gap, que não pode ser ganho, e o modelo pareceria bom só por acertar o gap. Com a abertura conhecida, uma medida se converte na outra, então nada se perde.
 
@@ -100,11 +101,11 @@ tratadas em `e02_tratamento.py`; a elegibilidade de cada pregão, em `e03_filtro
 ### 3.2 Sem vazamento de informação (look-ahead)
 
 - As variáveis têm dois grupos, conforme o momento em que ficam conhecidas:
-  - **Pré-abertura (`x_pre_`):** só usam dados com **horário de abertura do candle ≤ 08:58 BRT do dia D**. O candle das 08:58 fecha às 08:59 e deixa 1 min de margem.
-  - **Abertura observada (`x_open_`):** o gap e sua classe. Do dia D, só usam o `open` do primeiro candle; nunca `high`, `low`, `close` ou `volume` desse candle, nem candles seguintes. Entram nas duas perguntas, cuja decisão ocorre depois da abertura.
+  - **Pré-abertura (`x_pre_`):** só usam dados com **horário de abertura do candle ≤ 08:58 BRT do dia D**. O candle das 08:58 fecha às 08:59 e deixa 1 min de margem. São as únicas permitidas na pergunta 1 (prever o gap).
+  - **Abertura observada (`x_open_`):** o gap e sua classe. Do dia D, só usam o `open` do primeiro candle; nunca `high`, `low`, `close` ou `volume` desse candle, nem candles seguintes. Entram apenas nas perguntas 2 e 3, cuja decisão ocorre depois da abertura.
 - Toda normalização, escolha de limiar (ex.: o que é "gap"), seleção de variáveis e ajuste de hiperparâmetros é feita **só com dados de treino** de cada janela do walk-forward.
 - Nunca usar `shift(-1)` ou dados futuros em variáveis. Rótulos usam dados futuros por definição e ficam em colunas com prefixo `y_`.
-- O projeto não tem testes automatizados. Estas garantias, e como conferi-las, estão no topo de `src/abertura/e04_features.py` e `src/abertura/e07_models.py`: nenhuma variável `x_pre_` usa candle com horário > 08:58 BRT do dia D; nenhuma variável `x_open_` usa do dia D mais que o `open` do primeiro candle; nenhum rótulo `y_` entra como variável.
+- O projeto não tem testes automatizados. Estas garantias, e como conferi-las, estão no topo de `src/abertura/e04_features.py` e `src/abertura/e07_models.py`: nenhuma variável `x_pre_` usa candle com horário > 08:58 BRT do dia D; nenhuma variável `x_open_` usa do dia D mais que o `open` do primeiro candle; o modelo da pergunta 1 não recebe `x_open_` (`e07_models.check_features` bloqueia).
 
 ### 3.3 Formato dos arquivos
 
@@ -138,15 +139,16 @@ src/abertura/             # numerados na ordem dos dados (e = etapa); comandos: 
 reports/                  # gráficos e tabelas finais
 ```
 
-O desenvolvimento e a revisão seguem os módulos em `src/abertura`. Os arquivos de
-`reports/` são de uma análise anterior aos dados atuais e serão refeitos.
+O desenvolvimento e a revisão seguem os módulos em `src/abertura`. A pasta `reports/`
+ainda não existe; é criada quando houver gráficos e tabelas da análise exploratória ou
+finais.
 
 ## 5. Definições (parâmetros em `config/params.yaml`)
 
 - **Fechamento de referência (D-1):** `close` do último candle do pregão regular de D-1.
 - **Abertura (D):** `open` do primeiro candle de D. Normalmente 09:00 BRT (13:00 na Quarta-feira de Cinzas); o primeiro candle pode vir minutos depois (seção 2.4) ou horas depois em falha da B3 (31/07/2026).
 - **Gap (%):** `abertura_D / fechamento_D-1 - 1`. Inválido em dia de rolagem (`is_roll_day`) ou quando o pregão anterior não existe nos dados.
-- **Classe do gap:** alta / baixa / normal por limiar `±k`, observada na abertura; não é prevista. Escolhe os dias da pergunta 1 (só alta e baixa) e a direção da operação. `k` é escolhido no treino (por quantil ou valor fixo, ex.: 0,3%). No WIN, com dados limpos: |gap| > 0,3% ≈ 23% alta, 21% baixa, 55% normal.
+- **Classe do gap:** alta / baixa / normal por limiar `±k`. É o rótulo da pergunta 1; observada na abertura, também escolhe os dias da pergunta 2 (só alta e baixa). `k` é escolhido no treino (por quantil ou valor fixo, ex.: 0,3%). No WIN, com dados limpos: |gap| > 0,3% ≈ 23% alta, 21% baixa, 55% normal.
 - **Janela pós-abertura:** padrão 60 min, contados a partir do primeiro candle de D.
 - **Pregão elegível:** pregão regular (fora a Quarta-feira de Cinzas), que não seja o primeiro dia do histórico (o arquivo do professor começa no meio do pregão), sem minutos faltando na janela pós-abertura. Não há limite de atraso da abertura: o único atraso grande, em 31/07/2026 (primeira vela às 12:33), foi uma falha real da B3, que adiou a abertura em mais de 2 h. É um critério de qualidade dos dados: não ajustá-lo olhando retornos.
 - **Tendência / reversão / lateral:** só em dias com gap alta ou baixa, porque sem gap relevante não há direção a seguir nem gap a fechar. Reversão = toca o fechamento de D-1 dentro da janela; tendência = fecha a janela além da abertura, na direção do gap, por mais de `m` (`trend_margin`, 0,1%); caso contrário, lateral. Reversão tem prioridade sobre tendência.
@@ -154,7 +156,7 @@ O desenvolvimento e a revisão seguem os módulos em `src/abertura`. Os arquivos
 - **Variáveis de cada ativo externo:** retorno entre o horário do fechamento da B3 em D-1 e 08:58 BRT de D (`overnight`) e volatilidade realizada no mesmo intervalo (`night_vol`). Do alvo: amplitude média dos 5 pregões anteriores e retorno do pregão anterior, medidos dentro dos pregões para não incluir a rolagem. Todas são `x_pre_`; o gap observado é `x_open_` (seção 3.2). Retornos da última 1h/3h, do dia anterior lá fora e do pregão asiático foram cortados: são pedaços do `overnight` ou não têm relação com o gap.
 - **Preço externo conhecido:** último `close` com candle aberto até o instante, com no máximo `max_price_age_minutes` (7 dias). As variáveis externas só existem se o ativo teve alguma vela depois do fechamento da B3 em D-1 e até o corte. Sem negociação no intervalo (feriado lá fora), a variável fica ausente em vez de virar zero. Se o ativo negociou e parou (pane da bolsa), vale o último preço.
 - **Pausas do Brent e do cobre:** nesses dois ativos, os retornos e a volatilidade ignoram a variação entre o fechamento e a reabertura de pausas de 30 min a 12 h, onde acontece a troca de contrato do CFD. Reaberturas de fim de semana entram normalmente.
-- **Variáveis alinhadas ao gap:** na pergunta 1, cada retorno externo é multiplicado pelo sinal do gap, medindo se o exterior confirma ou contraria a abertura. Como dependem do gap, são `x_open_aligned_`.
+- **Variáveis alinhadas ao gap:** na pergunta 2, cada retorno externo é multiplicado pelo sinal do gap, medindo se o exterior confirma ou contraria a abertura. Como dependem do gap, são `x_open_aligned_`.
 
 ## 6. Modelos
 

@@ -15,6 +15,7 @@ dependencies = [
   "tzdata>=2024.1",
   "exchange-calendars>=4.11,<5",
   "scikit-learn>=1.5,<2",
+  "matplotlib>=3.11.2",
 ]
 
 [tool.hatch.build.targets.wheel]

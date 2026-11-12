@@ -12,12 +12,10 @@ módulos estão em revisão, um por vez, antes da análise exploratória e dos m
 ## Enunciado do professor (quadro)
 
 Transcrição do quadro com os modelos propostos na disciplina; o Modelo 1 não aparece
-na foto. Este projeto é o **Modelo 3**. O quadro pede para classificar a abertura em
-normal, gap de alta ou gap de baixa. O projeto **não prevê** essa classe: só ganha o gap
-quem carrega posição da véspera, o que o grupo não faz. A classe é observada na abertura
-e escolhe os dias em que o projeto prevê o comportamento (tendência, reversão ou lateral)
-e a faixa dos primeiros 60 minutos (AGENTS.md, seção 1). É um afastamento consciente do
-enunciado.
+na foto. Este projeto é o **Modelo 3**. A classificação pedida no quadro (normal, gap de
+alta, gap de baixa) é a pergunta 1 do projeto e sua entrega principal; as perguntas 2 e 3
+(comportamento e faixa depois da abertura) investigam se sobra algo operável
+(AGENTS.md, seção 1).
 
 **Modelo 2: Previsão T(t+1), tendência**
 
@@ -135,11 +133,6 @@ Custo: perde o movimento real da pausa, em média 0,2% no Brent e 0,04% no cobre
 | Fora por ser o 1º dia do histórico (15/10/2020) | 1 | 0 |
 | Dias de rolagem (gap vazio) | 36 | 73 |
 
-`reports/` guarda resultados de uma análise anterior à emenda e ao download atual (relatório
-de qualidade, correlações, matrizes de confusão, gráficos e uma pesquisa de índices
-asiáticos não adotados). Os números ali não refletem os dados atuais e serão refeitos
-na análise exploratória.
-
 ## Para onde vai o projeto
 
 1. **Revisão dos módulos (em andamento):** `e01` a `e04` revisados; faltam `e05_labels`,
@@ -159,7 +152,22 @@ na análise exploratória.
 
 O AGENTS.md (seção 5) pede que o limiar entre gap e abertura normal seja escolhido só
 com dados de treino. Hoje ele está fixo em 0,3% (`labels.gap_threshold`). Ele define
-quais dias entram na previsão do comportamento. Decidir na revisão do `e05_labels`.
+a classe do gap (pergunta 1) e os dias que entram na previsão do comportamento. Decidir na revisão do `e05_labels`.
+
+### Janela incompleta por parada do mercado
+
+A regra de elegibilidade tira o pregão com minutos faltando na janela de 60 min. Ela foi
+feita para falhas nos dados, mas também tira os dois maiores gaps do período, em que os
+buracos parecem paradas reais do mercado (leilão ou circuit breaker), com volume muito
+alto nos minutos vizinhos:
+
+- 26/10/2026: WIN −14,90% (51 de 60 velas; parada de 10 min perto das 09:30) e WDO
+  +9,19% (46 de 60 velas; parada de 15 min).
+- 05/10/2026: WIN +9,21% (51 de 60 velas; buracos de 2 a 3 min na abertura). O WDO
+  desse dia (−4,86%) tem a janela completa e está na amostra.
+
+1. Manter fora, registrando o motivo como dia extremo, e não como falha nos dados.
+2. Incluir: aceitar janelas com buracos curtos quando a causa é o próprio mercado.
 
 ### Custos
 
