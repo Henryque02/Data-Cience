@@ -13,6 +13,7 @@ externals:
   ftse: gbridxgbp       # FTSE 100
   nikkei: jpnidxjpy     # Nikkei 225
   a50: chiidxusd        # China A50
+  hsi: hkgidxhkd        # Hang Seng (Hong Kong)
   brent: brentcmdusd    # Petróleo Brent
   gold: xauusd          # Ouro
   dxy: dollaridxusd     # Dollar Index
@@ -20,6 +21,12 @@ externals:
   copper: coppercmdusd  # Cobre
   eurusd: eurusd        # EUR/USD
   usdjpy: usdjpy        # USD/JPY
+  usdzar: usdzar        # USD/ZAR (também representa o rand da lista)
+  usdcnh: usdcnh        # Yuan offshore; não é o CNY doméstico
+  usdchf: usdchf        # Franco suíço
+  audusd: audusd        # Dólar australiano
+  btcusd: btcusd        # Bitcoin/USD, CFD da Dukascopy
+  ethusd: ethusd        # Ether/USD, CFD da Dukascopy
 # Download dos externos. Começa duas semanas antes do período de análise (sample).
 download:
   start: '2020-10-01'
@@ -32,12 +39,14 @@ download:
 features:
   pre_open:
     cutoff_brt: '08:58'
-    # Preço mais velho que isso fica vazio (7 dias: cobre feriados prolongados lá fora).
-    max_price_age_minutes: 10080
-    # CFDs que trocam de contrato na pausa diária: os retornos ignoram o salto da reabertura
-    # depois de pausas entre 30 min e 12 h (fins de semana são mantidos).
-    daily_pause_assets: [brent, copper]
-    daily_pause_minutes: [30, 720]
+    # Quarta-feira de Cinzas (abertura às 13:00, marcada pelo calendário da B3).
+    special_cutoff_brt: '12:58'
+    # CFDs que trocam de contrato na pausa diária: a troca alonga a pausa para estes
+    # minutos (normal: Brent 181, cobre 61), e o salto da reabertura é descontado.
+    roll_pause_minutes: {brent: [200, 201], copper: [80, 81]}
+    # Preço de fora no fechamento da B3 em D-1 mais velho que isso: feriado lá fora em D-1,
+    # e o overnight fica vazio (23/11/2026).
+    max_start_age_hours: 24
 
 sample:
   # Período de análise: primeiro e último dia comuns a WIN e WDO.
@@ -46,8 +55,9 @@ sample:
 
 labels:
   post_open_minutes: 60
-  gap_threshold:
-    value: 0.003
+  # Limiar do gap por alvo (17/11/2026). O do WDO deixa a mesma proporção de dias normais
+  # que o do WIN nos dois primeiros anos, que só servem de treino (44%).
+  gap_threshold: {win: 0.003, wdo: 0.0025}
   behavior:
     trend_margin: 0.001
 
@@ -58,7 +68,9 @@ walk_forward:
   train_years: 2
   test_months: 3
   step_months: 3
-  min_train_rows: 60
+  # Fim do período de desenvolvimento. Os 12 meses seguintes ficam reservados para o
+  # teste final (decisão de 17/11/2026), lidos uma única vez, e não entram nos estudos.
+  dev_end: '2025-11-06'
 
 backtest:
   status: pending_future_phase

@@ -1,4 +1,6 @@
 # Dados
+/data/staging/
+data/
 
 # Ambiente e dependências
 /.venv/

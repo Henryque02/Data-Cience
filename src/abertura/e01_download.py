@@ -15,7 +15,7 @@ do tempo limite e o arquivo tiver velas. Assim nunca fica arquivo pela metade.
 
 Rodar de novo pula os blocos já publicados, então uma coleta interrompida continua de
 onde parou. O conteúdo das velas não é conferido aqui: a junção e as duplicatas ficam
-em e02_tratamento.py, e a elegibilidade dos pregões em e03_filtros.py.
+em e02_tratamento.py, que também resume os dias e marca rolagens, sem excluir pregões.
 """
 
 from __future__ import annotations
