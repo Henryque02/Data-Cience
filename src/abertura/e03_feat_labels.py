@@ -2,8 +2,8 @@
 
 Não tem comando próprio: quem chama é o e04_daily.py. A separação entre o que pode e o
 que não pode entrar no modelo está no prefixo das colunas, conferido por
-e05_validacao.check_features: x_pre_ é conhecido antes da abertura, x_open_ na abertura e
-y_ só depois (AGENTS.md, seção 3.2).
+e05_validacao.check_features: x_pre_ é conhecido antes da abertura e y_ só na abertura
+(AGENTS.md, seção 3.2).
 
 Antes da abertura (x_pre_)
 
@@ -51,32 +51,19 @@ Antes da abertura (x_pre_)
   primeiro dia do histórico não entra, porque pode ser parcial (o arquivo do professor
   começa às 11:49 de 15/10/2020): as medidas que dependeriam dele ficam vazias.
 
-O gap (x_open_ e y_gap)
+O rótulo (y_)
 
-- open_features calcula o gap (abertura da 1ª vela de D / fechamento de D-1 - 1) e seu
-  tamanho sem sinal, inclusive em dia de rolagem, sem ajuste entre contratos. Nas
-  perguntas 2 e 3 o gap já aconteceu e é variável (x_open_gap); na pergunta 1 ele é a
-  resposta e aparece, com o mesmo valor, como y_gap.
-
-Depois da abertura (y_)
-
-- opening_window resume a janela de 60 min a partir da primeira vela de D: abertura,
-  máxima, mínima e fechamento, usando apenas as velas disponíveis, mesmo com buracos.
+- gap_labels calcula o gap (abertura da 1ª vela de D / fechamento de D-1 - 1), inclusive
+  em dia de rolagem, sem ajuste entre contratos (y_gap), e a sua classe (y_gap_class).
 - gap_class classifica o gap em alta, baixa ou normal pelo limiar de cada alvo
-  (labels.gap_threshold: 0,30% no WIN e 0,25% no WDO). É o rótulo da pergunta 1, a
-  classificação pedida no quadro do professor. Gap exatamente no limiar é normal; sem
-  fechamento anterior, o rótulo fica vazio.
-- behavior só existe em dia de gap de alta ou de baixa (mesmo limiar). Reversão: o preço
-  toca o fechamento de D-1 na janela. Tendência: a janela fecha mais de 0,1% além da
-  abertura, na direção do gap. Senão, lateral. Reversão tem prioridade, mesmo se o dia
-  também terminar a favor. Sem fechamento anterior, vazio.
-- range_labels mede a máxima e a mínima da janela em relação à abertura (faixa).
-- labels junta y_gap, y_gap_class e y_behavior.
+  (labels.gap_threshold: 0,30% no WIN e 0,25% no WDO). É a classificação pedida no quadro
+  do professor. Gap exatamente no limiar é normal; sem fechamento anterior, o rótulo
+  fica vazio.
 
 Conferência contra vazamento (AGENTS.md, seção 3.2), num dia real: alterar preços
 externos depois das 08:58 (12:58 na Cinzas) ou velas do alvo no dia D não pode mudar as
 x_pre_ de D; alterar o close externo das 08:58 muda o overnight. Alterar máxima, mínima,
-fechamento ou volume da 1ª vela de D, ou as velas seguintes, não pode mudar o gap;
+fechamento ou volume da 1ª vela de D, ou as velas seguintes, não pode mudar o gap (y_gap);
 alterar a abertura da 1ª vela muda.
 """
 
@@ -187,24 +174,6 @@ def target_features(candles: pd.DataFrame, dates: pd.DatetimeIndex) -> pd.DataFr
     return result.reindex(dates)
 
 
-def open_features(first_open: pd.Series, prev_close: pd.Series) -> pd.DataFrame:
-    """Gap observado, inclusive na rolagem: do dia D, só o open do primeiro candle."""
-    gap = first_open / prev_close - 1
-    return pd.DataFrame({'x_open_gap': gap, 'x_open_gap_abs': gap.abs()})
-
-
-def opening_window(candles: pd.DataFrame, sessions: pd.DataFrame, minutes: int) -> pd.DataFrame:
-    """Resume cada pregão na janela que começa no primeiro candle observado."""
-    dates = local_dates(candles)
-    inside = candles.datetime < dates.map(sessions.first_utc) + pd.Timedelta(minutes=minutes)
-    return candles[inside].groupby(dates[inside]).agg(
-        open=('open', 'first'),
-        high=('high', 'max'),
-        low=('low', 'min'),
-        close=('close', 'last'),
-    )
-
-
 def gap_class(gap: pd.Series, threshold: float) -> pd.Series:
     """Classifica o gap; sem gap válido o rótulo fica ausente."""
     labels = pd.Series('normal', index=gap.index, dtype='object')
@@ -213,43 +182,7 @@ def gap_class(gap: pd.Series, threshold: float) -> pd.Series:
     return labels.where(gap.notna())
 
 
-def behavior(
-    window: pd.DataFrame, prev_close: pd.Series, gap: pd.Series, threshold: float,
-    trend_margin: float,
-) -> pd.Series:
-    """Só existe em dia com gap relevante; reversão tem prioridade sobre tendência."""
-    # Gap exatamente no limiar não conta; gap ausente compara como falso.
-    up, down = gap > threshold, gap < -threshold
-    move = window.close / window.open - 1
-    aligned_move = move.where(up, -move)
-    touched = (up & window.low.le(prev_close)) | (down & window.high.ge(prev_close))
-    labels = pd.Series('lateral', index=window.index, dtype='object')
-    labels[aligned_move > trend_margin] = 'tendencia'
-    # A ordem define a prioridade: inverter estas linhas muda o rótulo de dias que fazem os dois.
-    labels[touched] = 'reversao'
-    return labels.where(up | down)
-
-
-def range_labels(window: pd.DataFrame) -> pd.DataFrame:
-    """Máxima e mínima da janela relativas à abertura."""
-    return pd.DataFrame(
-        {
-            'y_range_high': window.high / window.open - 1,
-            'y_range_low': window.low / window.open - 1,
-        }
-    )
-
-
-def labels(
-    window: pd.DataFrame, prev_close: pd.Series, gap: pd.Series, threshold: float,
-    trend_margin: float,
-) -> pd.DataFrame:
-    """Gap e sua classe (pergunta 1) e comportamento na janela de abertura (pergunta 2)."""
-    return pd.DataFrame(
-        {
-            # Mesmo valor de x_open_gap: aqui é a resposta da pergunta 1; lá, variável das 2 e 3.
-            'y_gap': gap,
-            'y_gap_class': gap_class(gap, threshold),
-            'y_behavior': behavior(window, prev_close, gap, threshold, trend_margin),
-        }
-    )
+def gap_labels(first_open: pd.Series, prev_close: pd.Series, threshold: float) -> pd.DataFrame:
+    """Gap e sua classe, o rótulo da pergunta 1: do dia D, só o open do primeiro candle."""
+    gap = first_open / prev_close - 1
+    return pd.DataFrame({'y_gap': gap, 'y_gap_class': gap_class(gap, threshold)})

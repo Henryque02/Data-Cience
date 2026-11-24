@@ -1,16 +1,16 @@
 # Classificação da abertura da B3
 
 Projeto da disciplina Data Science para Mercado Financeiro (UFG). Usa o que acontece
-no exterior entre o fechamento da B3 e a abertura do dia seguinte para prever os
-primeiros 60 minutos do pregão do mini índice (WIN) e do mini dólar (WDO). As
+no exterior entre o fechamento da B3 e a abertura do dia seguinte para prever se o mini
+índice (WIN) e o mini dólar (WDO) vão abrir com gap de alta, gap de baixa ou normal. As
 definições e regras completas estão no [AGENTS.md](AGENTS.md).
 
 ## Enunciado do professor (quadro)
 
 Transcrição do quadro com os modelos propostos na disciplina; o Modelo 1 não aparece
 na foto. Este projeto é o **Modelo 3**. A classificação pedida no quadro (normal, gap de
-alta, gap de baixa) é a pergunta 1 do projeto e sua entrega principal; as perguntas 2 e 3
-(comportamento e faixa depois da abertura) investigam se sobra algo operável
+alta, gap de baixa) é a pergunta 1 do projeto e, desde 24/11/2026, sua única entrega: as
+perguntas 2 e 3 (comportamento e faixa depois da abertura) e o backtest saíram do escopo
 (AGENTS.md, seção 1).
 
 **Modelo 2: Previsão T(t+1), tendência**
@@ -70,12 +70,11 @@ Os módulos em `src/abertura` são numerados na ordem em que os dados passam por
 |---|---|---|
 | `e01_download.py` | sim | baixa os externos da Dukascopy para `data/raw/feature/` |
 | `e02_tratamento.py` | sim | lê os CSVs, converte para UTC, emenda WIN/WDO e grava um Parquet por ativo em `data/tratamento/`; também tem as funções de pregão (calendário da B3, Cinzas, resumo dos dias e rolagens), usadas pelas etapas seguintes |
-| `e03_feat_labels.py` | não (usado pelo e04) | variáveis `x_pre_` e `x_open_` e rótulos `y_` |
+| `e03_feat_labels.py` | não (usado pelo e04) | variáveis `x_pre_` e o rótulo (`y_gap`, `y_gap_class`) |
 | `e04_daily.py` | sim | tabela diária `data/processed/daily.parquet` |
-| `e05_validacao.py` | não (usado pelos modelos e estudos) | o que vale igual para todas as perguntas: regra contra vazamento, frequência histórica, janelas do walk-forward (desenvolvimento e teste final), previsão fora da amostra e métricas (log loss, Brier, calibração, AUC, matriz de confusão) |
+| `e05_validacao.py` | não (usado pelo modelo e pelo estudo) | regra contra vazamento, frequência histórica, janelas do walk-forward (desenvolvimento e teste final), previsão fora da amostra e métricas (log loss, Brier, calibração, AUC, matriz de confusão) |
 | `modelo1_gap.py` | sim | modelo final da pergunta 1 (variáveis, vazio como zero, dois binários, walk-forward de 2 anos); avalia no desenvolvimento e, com `--final`, no período reservado, gravando `reports/modelo1_gap_final.csv` |
 | `estudo_gap.py` | sim (estudo) | pergunta 1: compara listas de variáveis (rodadas no topo do arquivo; listas congeladas em `LISTAS`) em logística multinomial e em dois binários, e o tratamento dos dias vazios (`--vazios`), só no desenvolvimento e sem rolagem |
-| `analise_tempo.py` | sim (análise) | quanto tempo o gap leva para fechar e quando acontece o pico a favor do gap |
 
 ## Configuração
 
@@ -84,8 +83,8 @@ Tudo fica em `config/params.yaml`:
 - `targets`: WIN e WDO, os dois arquivos de cada um, a data de troca entre eles e o fuso.
 - `externals`: as 20 séries externas e o código de cada uma na Dukascopy.
 - `download`: início geral e por ativo, paralelismo, tentativas e tempo limite da coleta.
-- `features`, `sample`, `labels`, `models`, `walk_forward`, `backtest`: parâmetros das
-  etapas seguintes. O período de análise (`sample`) vai de 15/10/2020 a 06/11/2026.
+- `features`, `sample`, `labels`, `models`, `walk_forward`: parâmetros das etapas
+  seguintes. O período de análise (`sample`) vai de 15/10/2020 a 06/11/2026.
 
 ## Dados
 
@@ -157,9 +156,6 @@ gap de 16/10/2020, mas o dia parcial não entra no histórico do alvo: o retorno
 pregão anterior de 16/10/2020 e a amplitude de 5 dias de 22/10/2020 ficam vazios.
 As colunas `is_eligible` e `has_gap_in_data` foram retiradas em 16/11/2026: tinham
 o mesmo valor em todas as linhas.
-Janelas incompletas usam somente as velas disponíveis nos 60 minutos de relógio,
-sem interpolação: a faixa e o último preço observado podem não representar a hora
-inteira. Os extremos de 26/10/2026 e 05/10/2026 também entram.
 
 ## Para onde vai o projeto
 
@@ -173,9 +169,9 @@ inteira. Os extremos de 26/10/2026 e 05/10/2026 também entram.
 3. **Análise exploratória:** já houve correlações e descrição dos rótulos no checkpoint;
    atualizar a análise depois das mudanças solicitadas.
 4. **Modelos:** pergunta 1 concluída em 23/11/2026 (`modelo1_gap.py`, teste final lido;
-   ver "Teste final da pergunta 1"). Perguntas 2 (comportamento) e 3 (faixa) pendentes.
-5. **Backtest** (`e06_backtest.py`, ainda não existe): entrada na vela seguinte à
-   abertura, alvo e stop pela faixa prevista, custos e slippage.
+   ver "Teste final da pergunta 1"). Perguntas 2 (comportamento) e 3 (faixa) saíram do
+   escopo em 24/11/2026, por decisão do usuário.
+5. **Backtest:** fora do escopo desde 24/11/2026 (dependia das perguntas 2 e 3).
 6. **Relatório final.**
 
 ## Decisões pendentes
@@ -228,6 +224,42 @@ Dois binários contra multinomial, em log loss: no WIN, +0,006 ± 0,002 com C fi
 +0,005 ± 0,004 com C escolhido no treino; no WDO, +0,002 ± 0,002 e +0,002 ± 0,003
 (empate). Com C escolhido no treino (mediana 0,22), o WIN piora um pouco (0,617 contra
 0,609) e o WDO melhora um pouco (0,555 contra 0,560).
+
+Árvores com as mesmas variáveis (`estudo_gap.py --arvores`, 24/11/2026): random forest
+(500 árvores, folha mínima de 20) piora o log loss em 0,060 ± 0,011 no WIN e 0,047 ± 0,010
+no WDO; gradient boosting (profundidade 3), em 0,160 ± 0,030 e 0,164 ± 0,032. A logística
+fica.
+
+### Teste só com retornos da madrugada (24/11/2026)
+
+Pedido do usuário: escolher as variáveis só entre os retornos da madrugada (`overnight`),
+sem agitação (`night_vol`) nem histórico do alvo, pelo mesmo processo (`estudo_gap.py
+--overnight`, rodadas 1 a 3, só desenvolvimento). Regra escrita para passar da rodada 1 à 2,
+que reproduz as escolhas de 23/11: núcleo é o grupo cuja retirada piora o log loss em mais
+de duas vezes o erro; fraco, o que piora pelo menos 0,001 nos dois formatos; o resto sai.
+
+- **WIN (6):** S&P, USD/MXN, AUD/USD, USD/ZAR (núcleo), Nikkei e A50 (fracos; o bloco melhora
+  o núcleo em 2,0 a 2,1 vezes o erro). Europa e dólar global quase não fazem diferença;
+  tirar as commodities melhorou um pouco.
+- **WDO (8):** DXY, USD/MXN, AUD/USD, USD/ZAR, USD/CNH (núcleo), S&P, cobre e Nikkei (fracos;
+  o bloco melhora o núcleo em 2,5 a 2,6 vezes o erro).
+- **Lasso nos 19 retornos:** empata com as listas (WIN −0,007 ± 0,010; WDO −0,003 ± 0,008) e
+  mantém em quase todas as janelas as mesmas variáveis, mais algumas parecidas.
+
+Comparação com o modelo atual (`--comparar-overnight`: vazio como zero, dois binários, C =
+0,1, mesmos dias), em log loss:
+
+| | WIN | WDO |
+|---|---|---|
+| Modelo atual | 0,609 (11 variáveis) | 0,560 (10 variáveis) |
+| Atual sem as que não são overnight | 0,659 (−0,050 ± 0,009) | 0,575 (−0,015 ± 0,007) |
+| Só overnight, escolhidas de novo | 0,663 (−0,054 ± 0,011) | 0,574 (−0,014 ± 0,007) |
+| Frequência histórica | 0,931 | 0,870 |
+
+Só com retornos da madrugada, o modelo piora: muito no WIN (5 vezes o erro) e no limite no
+WDO (2 vezes). A perda vem das variáveis retiradas (histórico do alvo e, no WDO, a agitação
+do Europe 50), que dizem o tamanho provável do gap; escolher os retornos de novo não
+compensa. O modelo atual fica como está. O ano reservado não foi usado neste teste.
 
 ### Teste final da pergunta 1
 
@@ -295,25 +327,23 @@ minutos antes da abertura das 13:00 (`special_cutoff_brt`). O calendário da B3 
 qual dia é a Cinzas; a hora fixa entrou em 23/11/2026 no lugar da hora de abertura da
 biblioteca, com os mesmos cortes.
 
-### Janelas de 60 minutos incompletas
+### Buracos na primeira hora
 
-São 10 dias no WIN e 6 no WDO, com três situações (causas pesquisadas em 17/11/2026):
+São 10 dias no WIN e 6 no WDO com velas faltando nos primeiros 60 minutos, em três
+situações (causas pesquisadas em 17/11/2026). O gap não é afetado, porque usa só a
+abertura; os dias ficam na amostra:
 
 - **Falha da B3 no WIN:** 21/08/2025 (17 velas; buraco de 09:17 a 10:25) e 03/06/2025
   (8 velas; buraco de 09:04 a 09:55). Em 21/08/2025 a B3 informou falha no canal de
   market data dos derivativos e normalização às 10h10, depois do cancelamento de ofertas
   pelas corretoras. Em 03/06/2025 há só um relato de imprensa de instabilidade no mini
-  índice e no mini dólar. O WDO desses dias está completo. Os dois tiveram gap normal,
-  então não têm rótulo de comportamento; a faixa sai de poucos minutos.
+  índice e no mini dólar. O WDO desses dias está completo.
 - **Paradas reais nas eleições:** 26/10/2026 (WIN 51 velas, WDO 46): circuit breaker no
   Ibovespa, o primeiro desde 2020. Antes do buraco o WIN fica parado em 177.215 e o WDO em
   5.430, com quase nenhum negócio, e reabrem em 166.790 e 5.610 com volume alto.
   05/10/2026 (WIN 51 velas): buracos de 1 a 2 minutos na primeira meia hora, com volume
   alto, típicos de leilões por oscilação forte depois do primeiro turno.
-- **Falta de 1 a 3 velas:** 12 dias, sem efeito relevante. O gap não é afetado, porque usa só a abertura; o problema é dos rótulos das
-perguntas 2 e 3. Por ora todos ficam (16/11/2026: o usuário quer mais dados antes de
-decidir). Uma regra possível é deixar a faixa vazia com menos de 45 velas na 1ª hora,
-o que pega só as duas falhas.
+- **Falta de 1 a 3 velas:** 12 dias, sem efeito relevante.
 
 Em todo o pregão, 25 dias do WIN e 18 do WDO têm algum minuto faltando entre a primeira
 e a última vela. Um caso afeta o fechamento de D-1: o WDO de 27/09/2024 termina às
@@ -337,9 +367,7 @@ no WIN só por saber o calendário; a marcação não corrige o rótulo. Nos dia
 as duas opções davam o mesmo resultado. O salto acompanha os juros (WIN +0,25% em 2020,
 cerca de +2,1% em 2025-2026; WDO cerca de +0,5%, 7 de 73 negativas); corrigir o rótulo
 pela média das rolagens anteriores foi considerado e não adotado. A tabela mantém os
-dias e `is_roll_day`; a exclusão é feita no modelo. Na pergunta
-2, reversão nesses dias significa voltar ao preço de outro contrato: nenhum dos 36 dias
-de rolagem do WIN teve reversão.
+dias e `is_roll_day`; a exclusão é feita no modelo.
 
 ### Rolagem do Brent e do cobre
 
@@ -379,25 +407,9 @@ rótulo vazio nos dias sem rolagem e é muito melhor nos dias de rolagem.
 **Resolvido em 17/11/2026:** 0,30% no WIN e 0,25% no WDO (`labels.gap_threshold`). O
 do WDO deixa a mesma proporção de dias normais que o do WIN nos dois primeiros anos,
 que só servem de treino. O limiar móvel e o limiar por quantil do treino foram testados
-e não foram melhores. Com 0,25%, o WDO passou de 1.008 para 884 dias normais, e o
-comportamento (pergunta 2) passou a existir em 626 dias, contra 502 antes. Limitação:
+e não foram melhores. Com 0,25%, o WDO passou de 1.008 para 884 dias normais. Limitação:
 os gaps encolheram de 2020 a 2023, e com limiar fixo os anos recentes têm menos dias
 de gap.
-
-### Amplitude do primeiro candle (sugestão do professor, 23/11/2026)
-
-Teste rápido no desenvolvimento, sem rolagem, com os rótulos medidos a partir da entrada
-(2º candle). Pergunta 1: não pode entrar, porque o primeiro candle fecha depois da
-abertura. Pergunta 2: não ajuda (amplitude igual nas três classes; piora o log loss).
-Pergunta 3: ajuda pouco, como complemento do `range_5d` (R² da faixa de 0,150 para 0,161
-no WIN, 1,7× o erro; de 0,278 para 0,290 no WDO, 2,8× o erro). Para usar, falta decidir
-na pergunta 3: permitir o primeiro candle inteiro nas `x_open_` (hoje só o `open`) e medir
-os rótulos das perguntas 2 e 3 a partir da entrada, não da abertura.
-
-### Custos
-
-Emolumentos e corretagem por contrato estão vazios em `backtest.contracts`. Precisam
-ser definidos antes do backtest.
 
 ## Suposições em aberto
 

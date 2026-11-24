@@ -27,7 +27,7 @@ Walk-forward e métricas vêm de e05_validacao.py, iguais para todas as pergunta
 (principal), Brier, erro de calibração (ECE), AUC de cada classe, acerto, a tabela de
 calibração e a matriz de confusão, contra a frequência histórica nas mesmas janelas.
 
-Conferência contra vazamento: check_features (e05_validacao) recusa x_open_ e y_; o treino
+Conferência contra vazamento: check_features (e05_validacao) recusa o que não for x_pre_; o treino
 de cada janela termina antes do primeiro dia de teste.
 """
 

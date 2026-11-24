@@ -54,12 +54,9 @@ sample:
   end: '2026-11-06'
 
 labels:
-  post_open_minutes: 60
   # Limiar do gap por alvo (17/11/2026). O do WDO deixa a mesma proporção de dias normais
   # que o do WIN nos dois primeiros anos, que só servem de treino (44%).
   gap_threshold: {win: 0.003, wdo: 0.0025}
-  behavior:
-    trend_margin: 0.001
 
 models:
   logistic_c: 0.1
@@ -71,13 +68,3 @@ walk_forward:
   # Fim do período de desenvolvimento. Os 12 meses seguintes ficam reservados para o
   # teste final (decisão de 17/11/2026), lidos uma única vez, e não entram nos estudos.
   dev_end: '2025-11-06'
-
-backtest:
-  status: pending_future_phase
-  entry_rule: next_candle_after_first
-  slippage_ticks_per_side: 1
-  sensitivity_ticks: [0, 1, 2]
-  simultaneous_target_stop: worst_case
-  contracts:
-    win: {brl_per_point: 0.20, tick_points: 5, fees_brl_per_side: null, brokerage_brl_per_side: null}
-    wdo: {brl_per_point: 10.0, tick_points: 0.5, fees_brl_per_side: null, brokerage_brl_per_side: null}

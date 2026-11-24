@@ -1,7 +1,8 @@
 """Estudo da pergunta 1 (gap): compara listas de variáveis e formatos de logística.
 
 Uso: uv run --locked python -m abertura.estudo_gap [--alvo win] [--rodada 1] [--vazios]
-     [--formato] [--calibracao] [--recencia]
+     [--formato] [--calibracao] [--recencia] [--overnight] [--comparar-overnight]
+     [--arvores]
 
 Para testar uma hipótese, edite RODADAS abaixo: cada rodada tem, por alvo, conjuntos com
 nome e lista de variáveis (x_pre_ da tabela diária). O primeiro conjunto de cada alvo é a
@@ -31,6 +32,17 @@ dias normais (de cerca de 40% até 2022 para 70% em 2024-2025): treino de 2 anos
 de 18 meses e de 1 ano, e treino de 2 anos com peso maior nos dias recentes (o peso cai à
 metade a cada "meia-vida"). Os dias de teste são os mesmos (as janelas de teste do treino
 de 2 anos); "melhora" é contra o treino de 2 anos. Mostra o log loss por ano de teste.
+
+--overnight (teste de 24/11/2026): as rodadas 1 a 3 com só retornos da madrugada, sem
+agitação (night_vol) nem histórico do alvo; os mesmos grupos (GRUPOS_OVERNIGHT), a regra
+de passagem escrita junto de NUCLEO_OVERNIGHT e a lista final em LISTAS_OVERNIGHT.
+--comparar-overnight: o modelo atual (VARIAVEIS) contra ele mesmo sem as variáveis que não
+são overnight e contra LISTAS_OVERNIGHT, com vazio como zero e dois binários (C = 0,1);
+"melhora" é contra o modelo atual. Resultado: o modelo atual continua melhor.
+
+--arvores: o modelo escolhido contra random forest (500 árvores, folha mínima de 20) e
+gradient boosting (profundidade 3, taxa 0,05, 300 iterações), com as mesmas variáveis, o
+vazio como zero e as mesmas janelas; "melhora" é contra o modelo.
 
 Regras da comparação:
 - Lê data/processed/daily.parquet; só o período de desenvolvimento (até
@@ -62,6 +74,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import TimeSeriesSplit
@@ -132,13 +145,25 @@ GRUPOS = {
 }
 
 
-def proposal_sets(groups: dict[str, list[str]]) -> dict[str, list[str]]:
-    """A proposta completa, a proposta sem cada grupo e, para comparar, os 19 ativos."""
+def proposal_sets(
+    groups: dict[str, list[str]],
+    everything: tuple[str, list[str]] = ('19 overnight + agitação + histórico', ALL_19 + night_vol('sx5e') + TARGET_HISTORY),
+) -> dict[str, list[str]]:
+    """A proposta completa, a proposta sem cada grupo e, para comparar, todos os candidatos."""
     full = [name for features in groups.values() for name in features]
     sets = {'proposta completa': full}
     sets |= {f'sem {group}': [name for name in full if name not in features] for group, features in groups.items()}
-    sets['19 overnight + agitação + histórico'] = ALL_19 + night_vol('sx5e') + TARGET_HISTORY
+    name, columns = everything
+    sets[name] = columns
     return sets
+
+
+# Teste de 24/11/2026: só retornos da madrugada (overnight). Os mesmos grupos, sem os que
+# não são overnight (agitação da madrugada e histórico do alvo), pelas mesmas rodadas.
+GRUPOS_OVERNIGHT = {
+    asset: {name: columns for name, columns in groups.items() if all(c.endswith('_overnight') for c in columns)}
+    for asset, groups in GRUPOS.items()
+}
 
 
 # Rodada 2: grupos que fizeram falta na rodada 1 (núcleo) e os que ficaram dentro do acaso
@@ -167,12 +192,12 @@ def core_sets(groups: dict[str, list[str]], core: list[str], weak: list[str]) ->
 LISTAS = VARIAVEIS
 
 
-def lasso_sets(chosen: list[str]) -> dict[str, list[str]]:
-    """A lista da rodada 2, o Lasso nas 40 colunas e as 40 sem seleção (controle)."""
+def lasso_sets(chosen: list[str], candidates: list[str] = ALL_40, name: str = '40 colunas') -> dict[str, list[str]]:
+    """A lista da rodada 2, o Lasso em todos os candidatos e os candidatos sem seleção."""
     return {
         'lista da rodada 2': chosen,
-        'Lasso: 40 colunas': Lasso(ALL_40),
-        '40 colunas sem seleção': ALL_40,
+        f'Lasso: {name}': Lasso(candidates),
+        f'{name} sem seleção': candidates,
     }
 
 
@@ -185,6 +210,32 @@ RODADAS = {
     1: {asset: proposal_sets(groups) for asset, groups in GRUPOS.items()},
     2: {asset: core_sets(groups, NUCLEO[asset], FRACOS[asset]) for asset, groups in GRUPOS.items()},
     3: {asset: lasso_sets(LISTAS[asset]) for asset in GRUPOS},
+}
+# Regra da passagem da rodada 1 para a 2, escrita em 24/11/2026 a partir das escolhas de
+# 23/11 (que ela reproduz): núcleo é o grupo cuja retirada piora o log loss em mais de duas
+# vezes o erro; fraco, o que piora pelo menos 0,001 nos dois formatos, dentro do acaso; os
+# demais (piora menor que 0,001, ou melhora) saem.
+NUCLEO_OVERNIGHT = {
+    'win': ['bolsas EUA', 'moedas emergentes'],
+    'wdo': ['dólar global', 'moedas emergentes'],
+}
+FRACOS_OVERNIGHT = {
+    'win': ['bolsa Japão', 'bolsa China'],
+    'wdo': ['bolsas EUA', 'commodities', 'bolsa Japão'],
+}
+# Passagem da rodada 2 para a lista: se o bloco dos fracos melhora o núcleo em mais de
+# duas vezes o erro, entram todos os fracos (WIN e WDO, 24/11/2026).
+LISTAS_OVERNIGHT = {
+    asset: core_sets(groups, NUCLEO_OVERNIGHT[asset], FRACOS_OVERNIGHT[asset])['núcleo + todos os fracos']
+    for asset, groups in GRUPOS_OVERNIGHT.items()
+}
+RODADAS_OVERNIGHT = {
+    1: {asset: proposal_sets(groups, ('19 overnight', ALL_19)) for asset, groups in GRUPOS_OVERNIGHT.items()},
+    2: {
+        asset: core_sets(groups, NUCLEO_OVERNIGHT[asset], FRACOS_OVERNIGHT[asset])
+        for asset, groups in GRUPOS_OVERNIGHT.items()
+    },
+    3: {asset: lasso_sets(LISTAS_OVERNIGHT[asset], ALL_19, '19 overnight') for asset in GRUPOS_OVERNIGHT},
 }
 
 
@@ -331,6 +382,66 @@ def calibration_study(asset: str, params: dict) -> tuple[pd.DataFrame, pd.DataFr
     return summary_table, reliability(main_model, ORDER), confusion(main_model, ORDER)
 
 
+def tree_comparison(asset: str, params: dict) -> pd.DataFrame:
+    """O modelo escolhido contra árvores (random forest e gradient boosting), mesmas variáveis."""
+    features = VARIAVEIS[asset]
+    table = load(asset, params, []).fillna(dict.fromkeys(features, 0.0))
+    options = walk_options(params)
+    models = {
+        'dois binários (modelo)': lambda: TwoBinary(logistic(params['models']['logistic_c'])),
+        'random forest': lambda: RandomForestClassifier(
+            n_estimators=500, min_samples_leaf=20, max_features='sqrt', random_state=0, n_jobs=-1),
+        'gradient boosting': lambda: HistGradientBoostingClassifier(
+            max_depth=3, learning_rate=0.05, max_iter=300, l2_regularization=1.0, random_state=0),
+        'frequência histórica': baseline_model,
+    }
+    results = {name: walk_forward_predict(table, TARGET, features, make, **options) for name, make in models.items()}
+    reference = daily_loss(results['dois binários (modelo)'])
+    rows = {}
+    for name, predictions in results.items():
+        difference = reference - daily_loss(predictions)
+        rows[name] = scores(predictions, ORDER) | {
+            'melhora': difference.mean(), 'erro': difference.std() / np.sqrt(len(difference)),
+            'ECE': calibration_error(predictions, ORDER),
+        }
+    result = pd.DataFrame(rows).T.rename(columns={'n': 'dias', 'log_loss': 'log loss', 'accuracy': 'acerto'})
+    result['dias'] = result.dias.astype(int)
+    return result[['dias', 'log loss', 'melhora', 'erro', 'brier', 'ECE', 'acerto']]
+
+
+def overnight_comparison(asset: str, params: dict) -> pd.DataFrame:
+    """O modelo atual contra a lista só com overnight, no formato e no tratamento escolhidos."""
+    sets = {
+        'modelo atual': VARIAVEIS[asset],
+        'atual sem as não overnight': [name for name in VARIAVEIS[asset] if name.endswith('_overnight')],
+        'só overnight': LISTAS_OVERNIGHT[asset],
+    }
+    columns = sorted({name for features in sets.values() for name in features})
+    table = load(asset, params, []).fillna(dict.fromkeys(columns, 0.0))
+    options = walk_options(params)
+    c = params['models']['logistic_c']
+    results = {'frequência histórica': walk_forward_predict(table, TARGET, columns, baseline_model, **options)}
+    results |= {
+        f'{name} ({len(features)} variáveis)': walk_forward_predict(
+            table, TARGET, features, lambda: TwoBinary(logistic(c)), **options)
+        for name, features in sets.items()
+    }
+    reference = daily_loss(results[f'modelo atual ({len(VARIAVEIS[asset])} variáveis)'])
+    rows = {}
+    for name, predictions in results.items():
+        difference = reference - daily_loss(predictions)
+        rows[name] = scores(predictions, ORDER) | {
+            'melhora': difference.mean(), 'erro': difference.std() / np.sqrt(len(difference)),
+            'ECE': calibration_error(predictions, ORDER),
+        } | {f'AUC {k}': roc_auc_score(predictions.y_true.eq(k), predictions[k]) for k in ORDER}
+    result = pd.DataFrame(rows).T.rename(columns={
+        'n': 'dias', 'log_loss': 'log loss', 'accuracy': 'acerto', 'balanced_accuracy': 'acerto balanc.',
+    })
+    result['dias'] = result.dias.astype(int)
+    columns = ['dias', 'log loss', 'melhora', 'erro', 'brier', 'ECE', 'acerto', 'acerto balanc.']
+    return result[columns + [f'AUC {k}' for k in ORDER]]
+
+
 def format_study(asset: str, params: dict) -> pd.DataFrame:
     """Multinomial contra dois binários, com C fixo e com C escolhido no treino."""
     features = LISTAS[asset]
@@ -431,7 +542,10 @@ def main(argv: list[str] | None = None) -> int:
     """Imprime a comparação de cada alvo."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--alvo', choices=list(GRUPOS), nargs='+', default=list(GRUPOS))
-    parser.add_argument('--rodada', type=int, choices=list(RODADAS), default=max(RODADAS))
+    parser.add_argument('--rodada', type=int, choices=sorted(set(RODADAS) | set(RODADAS_OVERNIGHT)))
+    parser.add_argument('--overnight', action='store_true', help='rodadas do teste só com overnight')
+    parser.add_argument('--comparar-overnight', action='store_true', help='modelo atual contra a lista só com overnight')
+    parser.add_argument('--arvores', action='store_true', help='modelo contra random forest e gradient boosting')
     parser.add_argument('--vazios', action='store_true', help='estudo dos dias com variável vazia')
     parser.add_argument('--formato', action='store_true', help='multinomial contra dois binários')
     parser.add_argument('--calibracao', action='store_true', help='calibração e matriz de confusão do modelo')
@@ -440,6 +554,14 @@ def main(argv: list[str] | None = None) -> int:
     params = yaml.safe_load((PROJECT / 'config/params.yaml').read_text())
     pd.set_option('display.width', 250, 'display.float_format', '{:.4f}'.format)
     for asset in args.alvo:
+        if args.arvores:
+            print(f'\n== {asset.upper()} · logística x árvores (desenvolvimento, sem rolagem, vazio vira zero)')
+            print(tree_comparison(asset, params).to_string())
+            continue
+        if args.comparar_overnight:
+            print(f'\n== {asset.upper()} · modelo atual x só overnight (desenvolvimento, sem rolagem, vazio vira zero, dois binários)')
+            print(overnight_comparison(asset, params).to_string())
+            continue
         if args.recencia:
             print(f'\n== {asset.upper()} · recência do treino (desenvolvimento, sem rolagem, vazio vira zero)')
             result, years = recency_study(asset, params)
@@ -463,8 +585,11 @@ def main(argv: list[str] | None = None) -> int:
             print(result.to_string())
             print('\nDias de teste com a variável vazia:\n' + count.to_string())
             continue
-        print(f'\n== {asset.upper()} · rodada {args.rodada} (desenvolvimento, sem rolagem)')
-        result, lasso = compare(asset, params, RODADAS[args.rodada][asset])
+        rounds = RODADAS_OVERNIGHT if args.overnight else RODADAS
+        number = args.rodada or max(rounds)
+        kind = ' · só overnight' if args.overnight else ''
+        print(f'\n== {asset.upper()} · rodada {number}{kind} (desenvolvimento, sem rolagem)')
+        result, lasso = compare(asset, params, rounds[number][asset])
         print(result.to_string())
         if not lasso.empty:
             print('\nFração das janelas em que o Lasso manteve a variável (só as mantidas):')

@@ -5,8 +5,7 @@ funções. O que é de cada pergunta (variáveis, preparo dos dados, formato do 
 no arquivo do modelo; aqui fica só o que vale igual para todas.
 
 - check_features bloqueia variáveis proibidas (prefixos definidos em e03_feat_labels.py):
-  para prever o gap (pergunta 1) só entram x_pre_; para o comportamento (pergunta 2),
-  x_pre_ e x_open_. Rótulos y_ nunca entram.
+  só entram x_pre_, conhecidas antes da abertura; rótulos y_ nunca entram.
 - baseline_model prevê a frequência de cada classe no treino: é a referência mínima.
 - Janelas (início do treino, início do teste, fim do teste), sem embaralhar datas:
   walk_forward_windows (desenvolvimento) treina com 2 anos e testa nos 3 meses seguintes,
@@ -20,8 +19,8 @@ no arquivo do modelo; aqui fica só o que vale igual para todas.
   contra observada por faixa de probabilidade; ECE), evaluate (tudo isso, com a AUC de
   cada classe, contra a frequência histórica) e confusion (matriz de confusão).
 
-Conferência contra vazamento (AGENTS.md, seção 3.2): check_features recusa x_open_ na
-pergunta 1 e qualquer y_; em cada janela o treino termina antes do primeiro dia de teste.
+Conferência contra vazamento (AGENTS.md, seção 3.2): check_features recusa o que não for
+x_pre_; em cada janela o treino termina antes do primeiro dia de teste.
 """
 
 from __future__ import annotations
@@ -35,18 +34,16 @@ from sklearn.metrics import confusion_matrix, log_loss, roc_auc_score
 
 CLASSES = {
     'y_gap_class': ['baixa', 'normal', 'alta'],
-    'y_behavior': ['tendencia', 'reversao', 'lateral'],
 }
 
 Windows = list[tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp]]
 
 
-def check_features(target: str, features: list[str]) -> None:
-    """Bloqueia rótulos e, na previsão do gap, qualquer variável pós-abertura."""
-    allowed = ('x_pre_',) if target == 'y_gap_class' else ('x_pre_', 'x_open_')
-    invalid = [name for name in features if not name.startswith(allowed)]
+def check_features(features: list[str]) -> None:
+    """Bloqueia rótulos e qualquer variável que não seja conhecida antes da abertura."""
+    invalid = [name for name in features if not name.startswith('x_pre_')]
     if invalid:
-        raise ValueError(f'Variáveis não permitidas para {target}: {invalid}')
+        raise ValueError(f'Variáveis não permitidas: {invalid}')
 
 
 def baseline_model() -> DummyClassifier:
@@ -82,7 +79,7 @@ def predict(
     table: pd.DataFrame, target: str, features: list[str], make_model: Callable, windows: Windows,
 ) -> pd.DataFrame:
     """Treina em cada janela só com o passado e devolve as previsões fora da amostra."""
-    check_features(target, features)
+    check_features(features)
     results = []
     for train_start, test_start, test_end in windows:
         # '<' e não '<=': a data inicial do teste não pode estar no treino.
